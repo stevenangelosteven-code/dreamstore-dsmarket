@@ -12,6 +12,7 @@ export interface User {
   passwordHash?: string;
   name?: string;
   balance?: number;
+  pin?: string;
 }
 
 export interface Product {
@@ -51,6 +52,17 @@ export interface Order {
   remarks?: string;
   createdAt: string;
   updatedAt: string;
+  rating?: number;
+  reviewText?: string;
+}
+
+export interface Review {
+  id: string;
+  productName: string;
+  rating: number;
+  reviewText: string;
+  userEmail: string;
+  createdAt: string;
 }
 
 export interface PaymentMethod {
@@ -95,6 +107,26 @@ export interface PromoBanner {
   textColor?: string;
 }
 
+export interface StoreCarouselSlide {
+  image: string;
+  badge: string;
+  badgeColor: string;
+  title: string;
+  desc: string;
+  category: string;
+  buttonText: string;
+}
+
+export interface StoreConfig {
+  footerDescription: string;
+  aboutUs: string;
+  supportEmail: string;
+  supportPhone: string;
+  copyrightText: string;
+  carouselSlides: StoreCarouselSlide[];
+  complainTelegramUrl?: string;
+}
+
 export interface TopupRequest {
   id: string;
   userId: string;
@@ -122,6 +154,17 @@ export interface DBState {
   notifications: Notification[];
   banner?: PromoBanner;
   topups?: TopupRequest[];
+  csMessages?: CsMessage[];
+  config?: StoreConfig;
+}
+
+export interface CsMessage {
+  id: string;
+  sessionId: string;
+  sender: 'user' | 'cs';
+  text: string;
+  userEmail?: string;
+  createdAt: string;
 }
 
 export interface DashboardStats {

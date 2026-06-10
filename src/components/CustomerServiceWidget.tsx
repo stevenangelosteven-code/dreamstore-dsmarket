@@ -5,19 +5,26 @@ interface Message {
   id: string;
   sender: "user" | "cs";
   text: string;
-  time: string;
+  createdAt?: string; // standard server ISO timestamp
+  time?: string; // legacy manual formatted string
 }
 
-export function CustomerServiceWidget() {
+interface CustomerServiceWidgetProps {
+  userEmail?: string;
+}
+
+export function CustomerServiceWidget({ userEmail }: CustomerServiceWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      sender: "cs",
-      text: "Halo! Selamat datang di Layanan Pelanggan (CS) Dream Store Digital. Saya adalah Virtual Support Assistant Anda. Ada kendala atau pertanyaan yang bisa kami bantu hari ini?",
-      time: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
-    },
-  ]);
+  const [sessionId, setSessionId] = useState<string>(() => {
+    let id = localStorage.getItem("dream_store_cs_session_id");
+    if (!id) {
+      id = "cs_sess_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem("dream_store_cs_session_id", id);
+    }
+    return id;
+  });
+
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -26,7 +33,7 @@ export function CustomerServiceWidget() {
   const quickFaqs = [
     {
       q: "Bagaimana cara melakukan Top-Up Saldo?",
-      a: "Untuk melakukan Top-Up Saldo:\n1. Klik tombol '+ Top-Up' di Wallet Header bagian atas.\n2. Masukkan nominal isi saldo (Min. Rp 10.000).\n3. Pilih rekening transfer tujuan dan transfer sesuai nominal.\n4. Unggah foto struk bukti bayar Anda.\n5. Permintaan akan langsung diverifikasi admin secara manual dalam 5-10 menit, saldo akan masuk ke akun Anda!"
+      a: "Untuk melakukan Top-Up Saldo:\n1. Klik tombol '+ Top-Up' di Wallet Header bagian atas.\n2. Masukkan nominal isi saldo (Min. Rp 5.000).\n3. Pilih rekening transfer tujuan dan transfer sesuai nominal.\n4. Unggah foto struk bukti bayar Anda.\n5. Permintaan akan langsung diverifikasi admin secara manual dalam 5-10 menit, saldo akan masuk ke akun Anda!"
     },
     {
       q: "Pesanan saya tertunda / Pending",
@@ -42,76 +49,106 @@ export function CustomerServiceWidget() {
     }
   ];
 
+  // Helper to fetch chat history from server
+  const fetchHistory = async (sessId: string) => {
+    try {
+      const res = await fetch(`/api/cs/history?sessionId=${sessId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data);
+      }
+    } catch (e) {
+      console.error("Gagal menjangkau server CS:", e);
+    }
+  };
+
+  // Poll for messages in real-time if drawer is open
+  useEffect(() => {
+    fetchHistory(sessionId);
+
+    if (!isOpen) return;
+
+    // Start 3s polling loop
+    const interval = setInterval(() => {
+      fetchHistory(sessionId);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [isOpen, sessionId]);
+
+  // Auto scroll to bottom of chat list
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
 
-  const handleSendMessage = (textToSend: string, senderOverride: "user" | "cs" = "user") => {
+  const handleSendMessage = async (textToSend: string) => {
     if (!textToSend.trim()) return;
 
-    const newMsg: Message = {
-      id: Math.random().toString(),
-      sender: senderOverride,
-      text: textToSend,
-      time: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
-    };
+    setInputText("");
 
-    setMessages((prev) => [...prev, newMsg]);
-
-    if (senderOverride === "user") {
-      setInputText("");
-      triggerBotResponse(textToSend);
+    try {
+      const res = await fetch("/api/cs/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          text: textToSend.trim(),
+          userEmail: userEmail || undefined
+        })
+      });
+      if (res.ok) {
+        // Fetch fresh state instantly
+        fetchHistory(sessionId);
+      }
+    } catch (e) {
+      console.error("Error sending CS message:", e);
     }
   };
 
-  const triggerBotResponse = (userQuery: string) => {
-    setIsTyping(true);
-    setTimeout(() => {
+  const handleQuickQuestion = async (faq: typeof quickFaqs[0]) => {
+    try {
+      setIsTyping(true);
+      // 1. Post user's FAQ request
+      await fetch("/api/cs/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          text: faq.q,
+          userEmail: userEmail || undefined
+        })
+      });
+
+      // 2. Post bot's response answer
+      await fetch("/api/cs/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          text: faq.a,
+          userEmail: "bot@system.com"
+        })
+      });
+
       setIsTyping(false);
-      const query = userQuery.toLowerCase();
-      let responseText = "";
-
-      if (query.includes("topup") || query.includes("top up") || query.includes("saldo") || query.includes("isi")) {
-        responseText = "Untuk pertanyaan seputar isi Saldo Wallet: Silakan pastikan Anda transfer dengan nominal yang tepat ke rekening tujuan admin yang aktif, lalu upload bukti transfer di halaman Profil > Top-Up Saldo. Saldo diproses manual max 10 menit.";
-      } else if (query.includes("gagal") || query.includes("salah") || query.includes("akun") || query.includes("kredensial") || query.includes("login")) {
-        responseText = "Kendala akun gagal login mendapatkan jaminan garansi 100%! Harap hubungi WhatsApp Admin official di nomor +62 812-3090-9209 dengan mengirimkan ID Pesanan (ORD-XXXXXX) serta bukti screenshot kegagalan login untuk penukaran akun instan.";
-      } else if (query.includes("admin") || query.includes("wa") || query.includes("whatsapp") || query.includes("nomor") || query.includes("hubung") || query.includes("cs")) {
-        responseText = "Layanan CS Manusia kami aktif 24 jam di WhatsApp Resmi: +62 812-3090-9209. Klik saja opsi FAQ WhatsApp di atas untuk langsung menghubungkan browser Anda.";
-      } else if (query.includes("halo") || query.includes("permisi") || query.includes("siang") || query.includes("pagi") || query.includes("sore") || query.includes("malam")) {
-        responseText = "Halo! Senang bisa menyapa Anda kembali. Ada kendala spesifik yang bisa saya bantu atau barangkali ingin menanyakan perihal produk?";
-      } else {
-        responseText = "Terima kasih atas pesannya! Sebagai Asisten Virtual, saya menyarankan Anda untuk klik opsi pintas FAQ di atas, atau klik tombol WhatsApp CS Resmi kami untuk mengobrol langsung dengan Admin operasional kami yang sedang bersiap membantu Anda 24/7.";
-      }
-
-      const botMsg: Message = {
-        id: Math.random().toString(),
-        sender: "cs",
-        text: responseText,
-        time: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
-      };
-      setMessages((prev) => [...prev, botMsg]);
-    }, 1000);
+      fetchHistory(sessionId);
+    } catch (e) {
+      console.error(e);
+      setIsTyping(false);
+    }
   };
 
-  const handleQuickQuestion = (faq: typeof quickFaqs[0]) => {
-    // 1. Log the user choice inside the chat list
-    handleSendMessage(faq.q, "user");
-
-    // 2. Play typing effect then answer
-    setIsTyping(true);
-    setTimeout(() => {
-      setIsTyping(false);
-      const botMsg: Message = {
-        id: Math.random().toString(),
-        sender: "cs",
-        text: faq.a,
-        time: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
-      };
-      setMessages((prev) => [...prev, botMsg]);
-    }, 600);
-  };
+  // Fallback to local welcome greetings if server has zero messages yet
+  const displayMessages = messages.length > 0 ? messages : [
+    {
+      id: "welcome",
+      sender: "cs" as const,
+      text: "Halo! Selamat datang di Layanan Pelanggan (CS) Dream Store Digital. Saya adalah Virtual Support Assistant Anda. Ada kendala atau pertanyaan yang bisa kami bantu hari ini?",
+      createdAt: new Date().toISOString()
+    }
+  ];
 
   return (
     <>
@@ -181,7 +218,7 @@ export function CustomerServiceWidget() {
             ref={scrollRef}
             className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-950/40 text-xs text-left"
           >
-            {messages.map((m) => (
+            {displayMessages.map((m) => (
               <div 
                 key={m.id} 
                 className={`flex flex-col ${m.sender === "user" ? "items-end" : "items-start"}`}
@@ -193,7 +230,9 @@ export function CustomerServiceWidget() {
                 }`}>
                   {m.text}
                 </div>
-                <span className="text-[9px] text-slate-600 font-mono mt-1">{m.time}</span>
+                <span className="text-[9px] text-slate-600 font-mono mt-1">
+                  {new Date(m.createdAt || new Date()).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                </span>
               </div>
             ))}
 
@@ -201,14 +240,14 @@ export function CustomerServiceWidget() {
               <div className="flex flex-col items-start">
                 <div className="p-3 bg-slate-900 border border-slate-850 text-slate-500 rounded-2xl rounded-tl-none font-mono text-[10px] italic flex items-center gap-1.5">
                   <Bot className="w-3.5 h-3.5 animate-spin" />
-                  CS sedang mengetik...
+                  CS sedang membalas...
                 </div>
               </div>
             )}
           </div>
 
           {/* Quick FAQ Suggestion Options container */}
-          <div className="border-t border-slate-855 bg-slate-950 p-2.5 space-y-1">
+          <div className="border-t border-slate-800 bg-slate-950 p-2.5 space-y-1">
             <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-slate-400 block px-1.5 mb-1.5">
               Pilihan Pintasan FAQ Cepat:
             </span>

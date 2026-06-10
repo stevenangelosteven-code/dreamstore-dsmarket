@@ -64,6 +64,43 @@ function readDB(): DBState {
         isActive: true,
         bgColor: "bg-slate-900 border-b border-indigo-500/30",
         textColor: "text-white"
+      },
+      config: {
+        footerDescription: "E-Commerce penyalur akun premium, subscription membership, dan kredensial digital instan otomatis terlengkap & teraman.",
+        aboutUs: "Platform operasional digital berkecepatan tinggi dengan integrasi auto-distribution stok kredensial digital orisinal premium.",
+        supportEmail: "support@dreamstore.net",
+        supportPhone: "+62 857 1212 9999",
+        copyrightText: "© 2026 Dream Store Digital. Seluruh hak cipta dilindungi. Crafted for Ultimate Speed & Aesthetics",
+        complainTelegramUrl: "https://t.me/dreamstore_support",
+        carouselSlides: [
+          {
+            image: "",
+            badge: "STREAMING VIP",
+            badgeColor: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+            title: "Pusat Akun Premium & Subscription Tercepat",
+            desc: "Nikmati akses streaming Netflix, YouTube Premium & Spotify Orisinal tanpa hambatan. Aktivasi instan otomatis 24 jam penuh!",
+            category: "Streaming",
+            buttonText: "Beli Sekarang"
+          },
+          {
+            image: "",
+            badge: "HI-FI AUDIO",
+            badgeColor: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+            title: "Sub Audio & Game Gift Card Murah",
+            desc: "Rasakan jaminan kepuasan mendengarkan musik lossless & unlock voucher game favorit Anda dengan jaminan layanan terbaik.",
+            category: "Music",
+            buttonText: "Eksplor Audio"
+          },
+          {
+            image: "",
+            badge: "KREATIF PRO",
+            badgeColor: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+            title: "Canva & Adobe Subscription Termurah",
+            desc: "Tingkatkan produktivitas desain grafis, edit video & kreativitas profesional Anda dengan jaminan lisensi full durasi resmi.",
+            category: "Design",
+            buttonText: "Lihat Akun Desain"
+          }
+        ]
       }
     };
     fs.writeFileSync(DB_PATH, JSON.stringify(initialState, null, 2));
@@ -80,7 +117,47 @@ function readDB(): DBState {
     };
     modified = true;
   }
+  if (!db.config) {
+    db.config = {
+      footerDescription: "E-Commerce penyalur akun premium, subscription membership, dan kredensial digital instan otomatis terlengkap & teraman.",
+      aboutUs: "Platform operasional digital berkecepatan tinggi dengan integrasi auto-distribution stok kredensial digital orisinal premium.",
+      supportEmail: "support@dreamstore.net",
+      supportPhone: "+62 857 1212 9999",
+      copyrightText: "© 2026 Dream Store Digital. Seluruh hak cipta dilindungi. Crafted for Ultimate Speed & Aesthetics",
+      carouselSlides: [
+        {
+          image: "",
+          badge: "STREAMING VIP",
+          badgeColor: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+          title: "Pusat Akun Premium & Subscription Tercepat",
+          desc: "Nikmati akses streaming Netflix, YouTube Premium & Spotify Orisinal tanpa hambatan. Aktivasi instan otomatis 24 jam penuh!",
+          category: "Streaming",
+          buttonText: "Beli Sekarang"
+        },
+        {
+          image: "",
+          badge: "HI-FI AUDIO",
+          badgeColor: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+          title: "Sub Audio & Game Gift Card Murah",
+          desc: "Rasakan jaminan kepuasan mendengarkan musik lossless & unlock voucher game favorit Anda dengan jaminan layanan terbaik.",
+          category: "Music",
+          buttonText: "Eksplor Audio"
+        },
+        {
+          image: "",
+          badge: "KREATIF PRO",
+          badgeColor: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+          title: "Canva & Adobe Subscription Termurah",
+          desc: "Tingkatkan produktivitas desain grafis, edit video & kreativitas profesional Anda dengan jaminan lisensi full durasi resmi.",
+          category: "Design",
+          buttonText: "Lihat Akun Desain"
+        }
+      ]
+    };
+    modified = true;
+  }
   // Ensure lists are defined
+  if (db.config && !db.config.complainTelegramUrl) { db.config.complainTelegramUrl = "https://t.me/dreamstore_support"; modified = true; }
   if (!db.products) { db.products = []; modified = true; }
   if (!db.productAccounts) { db.productAccounts = []; modified = true; }
   if (!db.orders) { db.orders = []; modified = true; }
@@ -222,15 +299,15 @@ app.post("/api/user/register", (req, res) => {
     phone: phone.trim(),
     name: name.trim(),
     passwordHash: hashPassword(password),
-    balance: 100000, // Rp 100k starting welcome balance for testing
+    balance: 0, // No registration balance bonus as requested
     createdAt: new Date().toISOString()
   };
 
   db.users.push(newUser);
   writeDB(db);
 
-  logsActivity("USER_REGISTER", `User baru mendaftar: ${trimmedEmail} (${name}). Diberikan bonus saldo awal Rp 100.000.`);
-  res.json({ success: true, message: "Pendaftaran berhasil! Akun Anda siap dan dikreditkan bonus tes saldo Rp 100.000. Silakan masuk!" });
+  logsActivity("USER_REGISTER", `User baru mendaftar: ${trimmedEmail} (${name}).`);
+  res.json({ success: true, message: "Pendaftaran berhasil! Akun Anda telah siap secara instan. Silakan masuk!" });
 });
 
 // Login regular user
@@ -300,6 +377,71 @@ app.get("/api/user/me", (req, res) => {
     name: user.name,
     balance: user.balance || 0
   });
+});
+
+// GET user PIN status (returns if user has set a PIN)
+app.get("/api/user/pin-status", (req, res) => {
+  const userAuth = getUserAuth(req);
+  if (!userAuth) {
+    return res.status(401).json({ error: "Sesi tidak valid." });
+  }
+
+  const db = readDB();
+  const user = db.users.find(u => u.id === userAuth.id);
+  if (!user) {
+    return res.status(404).json({ error: "Akun tidak ditemukan." });
+  }
+
+  res.json({ hasPin: !!user.pin });
+});
+
+// GET public pin check by email (so checkout form can notify user to input PIN)
+app.get("/api/user/pin-check", (req, res) => {
+  const email = (req.query.email || "").toString().trim().toLowerCase();
+  if (!email) {
+    return res.json({ hasPin: false });
+  }
+
+  const db = readDB();
+  const user = db.users.find(u => u.email.toLowerCase() === email);
+  res.json({ hasPin: !!(user && user.pin) });
+});
+
+// POST user PIN (create or update, with Old PIN protection if set)
+app.post("/api/user/pin", (req, res) => {
+  const userAuth = getUserAuth(req);
+  if (!userAuth) {
+    return res.status(401).json({ error: "Sesi tidak valid." });
+  }
+
+  const { pin, oldPin } = req.body;
+  if (!pin) {
+    return res.status(400).json({ error: "Nomor PIN baru wajib diisi." });
+  }
+
+  // Validate exactly 6 digits
+  const pinRegex = /^\d{6}$/;
+  if (!pinRegex.test(pin)) {
+    return res.status(400).json({ error: "PIN baru harus berupa 6 digit angka." });
+  }
+
+  const db = readDB();
+  const user = db.users.find(u => u.id === userAuth.id);
+  if (!user) {
+    return res.status(404).json({ error: "Akun tidak ditemukan." });
+  }
+
+  // If user already has a PIN, oldPin must match it
+  if (user.pin && user.pin !== oldPin) {
+    return res.status(400).json({ error: "PIN lama yang Anda masukkan salah." });
+  }
+
+  // Set the PIN
+  user.pin = pin;
+  writeDB(db);
+
+  logsActivity("USER_PIN_UPDATE", `User ${user.email} berhasil memperbarui PIN keamanan.`);
+  res.json({ success: true, message: "PIN Keamanan Anda berhasil disimpan!" });
 });
 
 // Get regular user historic orders
@@ -424,8 +566,17 @@ app.post("/api/products/:productId/accounts", requireAdmin, (req, res) => {
     return res.status(404).json({ error: "Produk tidak ditemukan." });
   }
 
-  // Split lines
-  const lines = rawText.split(/\r?\n/).map((line: string) => line.trim()).filter((line: string) => line.length > 0);
+  // Split lines based on user-supplied format:
+  // Detect if there's any double newline (indicating empty lines between accounts).
+  // If so, split by empty line clusters to preserve multi-line structures for individual accounts.
+  // Otherwise, split by a single newline.
+  let splittedItems: string[] = [];
+  if (rawText.includes("\n\n") || rawText.includes("\r\n\r\n")) {
+    splittedItems = rawText.split(/\r?\n\s*\r?\n/);
+  } else {
+    splittedItems = rawText.split(/\r?\n/);
+  }
+  const lines = splittedItems.map((item: string) => item.trim()).filter((item: string) => item.length > 0);
   const inserted: ProductAccount[] = [];
 
   lines.forEach((line: string) => {
@@ -504,6 +655,18 @@ app.post("/api/orders", (req, res) => {
 
   // Save/Find user info
   let user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+
+  // Enforce PIN security check if user account has a PIN set
+  if (user && user.pin) {
+    const { pin } = req.body;
+    if (!pin) {
+      return res.status(403).json({ error: "PIN_REQUIRED", message: "Transaksi gagal: Akun Anda dilindungi PIN. Silakan masukkan PIN 6-angka keamanan Anda untuk mengonfirmasi transaksi ini." });
+    }
+    if (user.pin !== pin) {
+      return res.status(403).json({ error: "PIN_INVALID", message: "Transaksi ditolak: PIN keamanan yang Anda masukkan keliru." });
+    }
+  }
+
   if (!user) {
     user = {
       id: `usr_${Date.now()}`,
@@ -619,6 +782,58 @@ app.get("/api/orders/:id", (req, res) => {
     return res.status(404).json({ error: "Pesanan tidak ditemukan." });
   }
   res.json(order);
+});
+
+// PUBLIC: SUBMIT ORDER RATING & FEEDBACK AFTER DELIVERY
+app.post("/api/orders/:id/review", (req, res) => {
+  const { id } = req.params;
+  const { rating, reviewText } = req.body;
+
+  if (!rating || typeof rating !== "number" || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: "Rating harus berupa angka antara 1 dan 5." });
+  }
+
+  const db = readDB();
+  const order = db.orders.find(o => o.id === id);
+  if (!order) {
+    return res.status(404).json({ error: "Pesanan tidak ditemukan." });
+  }
+
+  if (order.status !== "completed") {
+    return res.status(400).json({ error: "Hanya pesanan dengan status 'Selesai' yang dapat diberikan ulasan." });
+  }
+
+  order.rating = rating;
+  order.reviewText = reviewText || "";
+  writeDB(db);
+
+  logsActivity("USER_ORDER_REVIEW", `User ${order.userEmail} memberikan rating ${rating} bintang untuk pesanan ${id}.`);
+
+  res.json({ success: true, message: "Terima kasih atas ulasan Anda! Masukan Anda sangat berarti bagi kami.", order });
+});
+
+// GET PUBLIC REVIEWS & FEEDBACKS
+app.get("/api/public/reviews", (req, res) => {
+  const db = readDB();
+  const reviews = db.orders
+    .filter(o => o.rating && o.rating > 0)
+    .map(o => {
+      const emailParts = o.userEmail.split("@");
+      const obfuscatedEmail = emailParts[0].length > 3
+        ? emailParts[0].substring(0, 3) + "***" + (emailParts[1] ? "@" + emailParts[1] : "")
+        : "***" + (emailParts[1] ? "@" + emailParts[1] : "");
+      return {
+        id: o.id,
+        productName: o.productName,
+        rating: o.rating,
+        reviewText: o.reviewText || "Sempurna!",
+        userEmail: obfuscatedEmail,
+        createdAt: o.createdAt
+      };
+    });
+  // Sort descending by creation date
+  reviews.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  res.json(reviews);
 });
 
 // PUBLIC & ADMIN: USER ORDERS HISTORY BY EMAIL Lookup
@@ -1051,6 +1266,35 @@ app.put("/api/banner", requireAdmin, (req, res) => {
   res.json({ success: true, banner: db.banner });
 });
 
+// GET Custom Store Config for footer/slides
+app.get("/api/store-config", (req, res) => {
+  const db = readDB();
+  res.json(db.config);
+});
+
+// UPDATE Custom Store Config (Admin Only)
+app.put("/api/admin/store-config", requireAdmin, (req, res) => {
+  const config = req.body;
+  if (!config) {
+    return res.status(400).json({ error: "Data konfigurasi kosong." });
+  }
+
+  const db = readDB();
+  db.config = {
+    footerDescription: config.footerDescription || "",
+    aboutUs: config.aboutUs || "",
+    supportEmail: config.supportEmail || "support@dreamstore.net",
+    supportPhone: config.supportPhone || "+62 857 1212 9999",
+    copyrightText: config.copyrightText || "© 2026 Dream Store Digital.",
+    complainTelegramUrl: config.complainTelegramUrl || "https://t.me/dreamstore_support",
+    carouselSlides: Array.isArray(config.carouselSlides) ? config.carouselSlides : []
+  };
+  writeDB(db);
+
+  logsActivity("CONFIG_UPDATE", "Admin memperbarui konfigurasi teks display dan banner slide 3 halaman.");
+  res.json({ success: true, config: db.config });
+});
+
 // ADMIN TOOLS: BACKUP DATABASE GENERATING SQL SCRIPT DYNAMICALLY
 app.get("/api/admin/backup-sql", requireAdmin, (req, res) => {
   const db = readDB();
@@ -1323,6 +1567,267 @@ app.put("/api/admin/topups/:id", requireAdmin, (req, res) => {
 
   writeDB(db);
   res.json({ success: true });
+});
+
+// ==========================================
+// NEW ADMIN & CS FEATURES: BALANCE ADJUSTMENT & SUPPORT REAL CHAT
+// ==========================================
+
+// GET /api/admin/users - List all registered users (for wallet adjust dashboard)
+app.get("/api/admin/users", requireAdmin, (req, res) => {
+  const db = readDB();
+  const cleanUsers = db.users.map(u => ({
+    id: u.id,
+    email: u.email,
+    name: u.name || "User",
+    phone: u.phone,
+    balance: u.balance || 0,
+    createdAt: u.createdAt
+  }));
+  res.json(cleanUsers);
+});
+
+// POST /api/admin/users/adjust-balance - Add or reduce a user's wallet balance
+app.post("/api/admin/users/adjust-balance", requireAdmin, (req, res) => {
+  const { email, amount, actionType, reason } = req.body;
+  
+  if (!email || amount === undefined || !actionType) {
+    return res.status(400).json({ error: "Email, nominal saldo, dan tipe aksi (tambah/kurang) wajib disertakan." });
+  }
+
+  const amt = Number(amount);
+  if (isNaN(amt) || amt <= 0) {
+    return res.status(400).json({ error: "Nominal saldo harus berupa angka positif yang valid." });
+  }
+
+  const db = readDB();
+  const user = db.users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+  
+  if (!user) {
+    return res.status(404).json({ error: "Pengguna dengan email tersebut tidak terdaftar di sistem." });
+  }
+
+  const currentBalance = user.balance || 0;
+  let newBalance = currentBalance;
+
+  if (actionType === "add") {
+    newBalance += amt;
+    user.balance = newBalance;
+    
+    // User notification
+    db.notifications.push({
+      id: `ntf_bal_${Date.now()}`,
+      targetRole: "user",
+      userEmail: user.email,
+      title: "Penyesuaian Saldo Admin (Top-up)",
+      message: `Admin telah menambahkan saldo Anda senilai Rp ${amt.toLocaleString("id-ID")}${reason ? ` dengan alasan: ${reason}` : ""}. Saldo Anda sekarang: Rp ${newBalance.toLocaleString("id-ID")}.`,
+      isRead: false,
+      createdAt: new Date().toISOString()
+    });
+
+    // Topup transaction entry
+    db.topups.push({
+      id: `topadj_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      userId: user.id,
+      userEmail: user.email,
+      userName: user.name || "User",
+      amount: amt,
+      paymentMethodId: "admin_adjustment",
+      paymentMethodName: "Salurkan oleh Admin (Top-up)",
+      status: "completed",
+      remarks: reason || "Manual top-up oleh administrator",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    logsActivity("ADMIN_CREDIT_ADD", `Admin menambahkan saldo Rp ${amt.toLocaleString("id-ID")} untuk user: ${user.email}. Alasan: ${reason || "-"}`);
+    
+  } else if (actionType === "reduce") {
+    if (currentBalance < amt) {
+      return res.status(400).json({ error: `Saldo pengguna saat ini (Rp ${currentBalance.toLocaleString("id-ID")}) kurang dari nilai pengurangan (Rp ${amt.toLocaleString("id-ID")}).` });
+    }
+    newBalance -= amt;
+    user.balance = newBalance;
+
+    // User notification
+    db.notifications.push({
+      id: `ntf_bal_${Date.now()}`,
+      targetRole: "user",
+      userEmail: user.email,
+      title: "Penyesuaian Saldo Admin (Deduction)",
+      message: `Admin telah memotong saldo Anda senilai Rp ${amt.toLocaleString("id-ID")}${reason ? ` dengan alasan: ${reason}` : ""}. Saldo Anda sekarang: Rp ${newBalance.toLocaleString("id-ID")}.`,
+      isRead: false,
+      createdAt: new Date().toISOString()
+    });
+
+    // Topup transaction entry
+    db.topups.push({
+      id: `topadj_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      userId: user.id,
+      userEmail: user.email,
+      userName: user.name || "User",
+      amount: -amt,
+      paymentMethodId: "admin_adjustment",
+      paymentMethodName: "Penyesuaian Admin (Deduction)",
+      status: "completed",
+      remarks: reason || "Manual debit oleh administrator",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    logsActivity("ADMIN_CREDIT_REDUCE", `Admin mengurangi saldo Rp ${amt.toLocaleString("id-ID")} untuk user: ${user.email}. Alasan: ${reason || "-"}`);
+  } else {
+    return res.status(400).json({ error: "Tipe aksi tidak dikenali (hanya 'add' atau 'reduce')." });
+  }
+
+  writeDB(db);
+  res.json({ success: true, balance: newBalance });
+});
+
+// GET /api/cs/history - Get CS history of a session
+app.get("/api/cs/history", (req, res) => {
+  const { sessionId } = req.query;
+  if (!sessionId) {
+    return res.status(400).json({ error: "Parameter sessionId dibutuhkan." });
+  }
+
+  const db = readDB();
+  if (!db.csMessages) db.csMessages = [];
+
+  const msgs = db.csMessages.filter(m => m.sessionId === sessionId);
+  res.json(msgs);
+});
+
+// POST /api/cs/message - User sends message or queries bot
+app.post("/api/cs/message", (req, res) => {
+  const { sessionId, text, userEmail } = req.body;
+  if (!sessionId || !text) {
+    return res.status(400).json({ error: "sessionId dan teks pesan wajib diisi." });
+  }
+
+  const db = readDB();
+  if (!db.csMessages) db.csMessages = [];
+
+  // 1. Save user message
+  const userMsg = {
+    id: `csm_u_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+    sessionId,
+    sender: "user" as const,
+    text: text.trim(),
+    userEmail: userEmail || undefined,
+    createdAt: new Date().toISOString()
+  };
+  db.csMessages.push(userMsg);
+
+  // 2. Trigger automated bot response
+  const query = text.toLowerCase();
+  let botResponseText = "";
+  let shouldBotReply = false;
+
+  if (query.includes("topup") || query.includes("top up") || query.includes("saldo") || query.includes("isi")) {
+    botResponseText = "Untuk pertanyaan seputar isi Saldo Wallet: Silakan pastikan Anda transfer dengan nominal yang tepat ke rekening tujuan admin yang aktif, lalu upload bukti transfer di halaman Profil > Top-Up Saldo. Saldo diproses manual max 10 menit.";
+    shouldBotReply = true;
+  } else if (query.includes("gagal") || query.includes("salah") || query.includes("akun") || query.includes("kredensial") || query.includes("login")) {
+    botResponseText = "Kendala akun gagal login mendapatkan jaminan garansi 100%! Harap hubungi WhatsApp Admin official di nomor +62 812-3090-9209 dengan mengirimkan ID Pesanan (ORD-XXXXXX) serta bukti screenshot kegagalan login untuk penukaran akun instan.";
+    shouldBotReply = true;
+  } else if (query.includes("admin") || query.includes("wa") || query.includes("whatsapp") || query.includes("nomor") || query.includes("hubung") || query.includes("cs")) {
+    botResponseText = "Layanan CS Manusia kami aktif 24 jam di WhatsApp Resmi: +62 812-3090-9209. Klik saja opsi FAQ WhatsApp untuk menghubungkan Anda secara instan.";
+    shouldBotReply = true;
+  }
+
+  if (shouldBotReply) {
+    const botMsg = {
+      id: `csm_b_${Date.now() + 50}_${Math.random().toString(36).substr(2, 5)}`,
+      sessionId,
+      sender: "cs" as const,
+      text: botResponseText,
+      createdAt: new Date(Date.now() + 100).toISOString()
+    };
+    db.csMessages.push(botMsg);
+  }
+
+  // Also push admin notifications about incoming support CS
+  db.notifications.push({
+    id: `ntf_cs_${Date.now()}`,
+    targetRole: "admin",
+    title: `Pesan CS Baru`,
+    message: `Sesi ${sessionId.substring(0, 8)}...${userEmail ? ` (${userEmail})` : ""}: "${text.substring(0, 50)}${text.length > 50 ? "..." : ""}"`,
+    isRead: false,
+    createdAt: new Date().toISOString()
+  });
+
+  writeDB(db);
+  res.json({ success: true });
+});
+
+// GET /api/admin/cs/sessions - Admin list all unique support chat threads
+app.get("/api/admin/cs/sessions", requireAdmin, (req, res) => {
+  const db = readDB();
+  if (!db.csMessages) db.csMessages = [];
+
+  const sessionsMap = new Map<string, { sessionId: string; userEmail?: string; lastMessage: string; lastTime: string; unreadCount: number }>();
+  
+  db.csMessages.forEach(m => {
+    const existing = sessionsMap.get(m.sessionId);
+    if (!existing) {
+      sessionsMap.set(m.sessionId, {
+        sessionId: m.sessionId,
+        userEmail: m.userEmail,
+        lastMessage: m.text,
+        lastTime: m.createdAt,
+        unreadCount: m.sender === "user" ? 1 : 0
+      });
+    } else {
+      existing.lastMessage = m.text;
+      existing.lastTime = m.createdAt;
+      if (m.userEmail && !existing.userEmail) {
+        existing.userEmail = m.userEmail;
+      }
+      if (m.sender === "user") {
+        existing.unreadCount += 1;
+      } else {
+        existing.unreadCount = 0; // Reset on CS reply
+      }
+    }
+  });
+
+  const sessions = Array.from(sessionsMap.values());
+  sessions.sort((a,b) => new Date(b.lastTime).getTime() - new Date(a.lastTime).getTime());
+  res.json(sessions);
+});
+
+// GET /api/admin/cs/messages/:sessionId - Admin load single session's history
+app.get("/api/admin/cs/messages/:sessionId", requireAdmin, (req, res) => {
+  const { sessionId } = req.params;
+  const db = readDB();
+  if (!db.csMessages) db.csMessages = [];
+
+  const msgs = db.csMessages.filter(m => m.sessionId === sessionId);
+  res.json(msgs);
+});
+
+// POST /api/admin/cs/reply - Admin send custom reply to a session id
+app.post("/api/admin/cs/reply", requireAdmin, (req, res) => {
+  const { sessionId, text } = req.body;
+  if (!sessionId || !text) {
+    return res.status(400).json({ error: "sessionId dan teks balasan wajib diisi." });
+  }
+
+  const db = readDB();
+  if (!db.csMessages) db.csMessages = [];
+
+  const replyMsg = {
+    id: `csm_cs_${Date.now()}`,
+    sessionId,
+    sender: "cs" as const,
+    text: text.trim(),
+    createdAt: new Date().toISOString()
+  };
+
+  db.csMessages.push(replyMsg);
+  writeDB(db);
+
+  res.json({ success: true, message: replyMsg });
 });
 
 // Seed Database automatically on boot

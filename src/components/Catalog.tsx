@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { Search, ShoppingBag, Radio, Shield, HelpCircle, Eye, ChevronRight, Check, Key, QrCode, Upload, ArrowRight, AlertTriangle, FileText } from "lucide-react";
-import { Product, PaymentMethod, Order } from "../types";
+import { Search, ShoppingBag, Radio, Shield, HelpCircle, Eye, ChevronRight, ChevronLeft, Sparkles, Check, Key, QrCode, Upload, ArrowRight, AlertTriangle, FileText, Gift, Lock, Star, RefreshCw } from "lucide-react";
+import { Product, PaymentMethod, Order, Review } from "../types";
+import promoStreaming from "../assets/images/promo_streaming_1781088411522.png";
+import promoMusic from "../assets/images/promo_music_1781088427331.png";
+import promoDesign from "../assets/images/promo_design_1781088441281.png";
 
 interface CatalogProps {
   onOrderCreated: (orderId: string) => void;
@@ -14,6 +17,71 @@ export function Catalog({ onOrderCreated, userEmail = "", userPhone = "" }: Cata
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Semua");
   
+  // Slide States & Configuration with generated visual elements
+  const [currentSlide, setCurrentSlide] = useState(0);
+  
+  const defaultSlides = [
+    {
+      image: promoStreaming,
+      badge: "STREAMING VIP",
+      badgeColor: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+      title: "Pusat Akun Premium & Subscription Tercepat",
+      desc: "Nikmati akses streaming Netflix, YouTube Premium & Spotify Orisinal tanpa hambatan. Aktivasi instan otomatis 24 jam penuh!",
+      category: "Streaming",
+      buttonText: "Beli Sekarang",
+    },
+    {
+      image: promoMusic,
+      badge: "HI-FI AUDIO",
+      badgeColor: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+      title: "Sub Audio & Game Gift Card Murah",
+      desc: "Rasakan jaminan kepuasan mendengarkan musik lossless & unlock voucher game favorit Anda dengan jaminan layanan terbaik.",
+      category: "Music",
+      buttonText: "Eksplor Audio",
+    },
+    {
+      image: promoDesign,
+      badge: "KREATIF PRO",
+      badgeColor: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+      title: "Canva & Adobe Subscription Termurah",
+      desc: "Tingkatkan produktivitas desain grafis, edit video & kreativitas profesional Anda dengan jaminan lisensi full durasi resmi.",
+      category: "Design",
+      buttonText: "Lihat Akun Desain",
+    }
+  ];
+
+  const [carouselSlides, setCarouselSlides] = useState<any[]>(defaultSlides);
+
+  const fetchCarouselConfig = async () => {
+    try {
+      const res = await fetch("/api/store-config");
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.carouselSlides) && data.carouselSlides.length > 0) {
+          const loaded = data.carouselSlides.map((slide: any, index: number) => ({
+            image: slide.image || (index === 0 ? promoStreaming : index === 1 ? promoMusic : promoDesign),
+            badge: slide.badge || defaultSlides[index].badge,
+            badgeColor: slide.badgeColor || defaultSlides[index].badgeColor,
+            title: slide.title || defaultSlides[index].title,
+            desc: slide.desc || defaultSlides[index].desc,
+            category: slide.category || defaultSlides[index].category,
+            buttonText: slide.buttonText || defaultSlides[index].buttonText,
+          }));
+          setCarouselSlides(loaded);
+        }
+      }
+    } catch (e) {
+      console.warn("Offline fallback for carousel configs load");
+    }
+  };
+
+  useEffect(() => {
+    const slideInterval = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % carouselSlides.length);
+    }, 5000);
+    return () => clearInterval(slideInterval);
+  }, [carouselSlides.length]);
+  
   // Checkout Modal State
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<"details" | "checkout_form" | "upload_proof">("details");
@@ -25,6 +93,10 @@ export function Catalog({ onOrderCreated, userEmail = "", userPhone = "" }: Cata
   const [phone, setPhone] = useState(userPhone);
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
   
+  // Security PIN validation states
+  const [userHasPin, setUserHasPin] = useState(false);
+  const [checkoutPin, setCheckoutPin] = useState("");
+  
   // File Transfer upload states
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofBase64, setProofBase64] = useState<string>("");
@@ -32,12 +104,45 @@ export function Catalog({ onOrderCreated, userEmail = "", userPhone = "" }: Cata
   const [submittingProof, setSubmittingProof] = useState(false);
   const [formError, setFormError] = useState("");
   const [orderError, setOrderError] = useState("");
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
 
   const categories = ["Semua", "Music", "Streaming", "Design"];
+
+  // Debounced check if user's email has a configured security PIN
+  useEffect(() => {
+    if (!email || !email.includes("@")) {
+      setUserHasPin(false);
+      return;
+    }
+    const delayDebounce = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/user/pin-check?email=${encodeURIComponent(email.trim())}`);
+        if (res.ok) {
+          const data = await res.json();
+          setUserHasPin(!!data.hasPin);
+        }
+      } catch (e) {
+        console.warn("Failed checking details for email pin", e);
+      }
+    }, 450);
+
+    return () => clearTimeout(delayDebounce);
+  }, [email]);
 
   useEffect(() => {
     fetchProducts();
     fetchPaymentMethods();
+    fetchCarouselConfig();
+    fetchReviews();
+
+    const handleSync = () => {
+      fetchCarouselConfig();
+    };
+    window.addEventListener("sync_store_config", handleSync);
+    return () => {
+      window.removeEventListener("sync_store_config", handleSync);
+    };
   }, []);
 
   const fetchProducts = async () => {
@@ -67,6 +172,21 @@ export function Catalog({ onOrderCreated, userEmail = "", userPhone = "" }: Cata
     }
   };
 
+  const fetchReviews = async () => {
+    setLoadingReviews(true);
+    try {
+      const res = await fetch("/api/public/reviews");
+      if (res.ok) {
+        const data = await res.json();
+        setReviews(data);
+      }
+    } catch (e) {
+      console.error("Failed to load reviews:", e);
+    } finally {
+      setLoadingReviews(false);
+    }
+  };
+
   useEffect(() => {
     if (userEmail) setEmail(userEmail);
     if (userPhone) setPhone(userPhone);
@@ -83,6 +203,7 @@ export function Catalog({ onOrderCreated, userEmail = "", userPhone = "" }: Cata
     setProofBase64("");
     setNominalInput("");
     setCreatedOrder(null);
+    setCheckoutPin(""); // reset PIN value
     const methods = [...paymentMethods];
     const token = localStorage.getItem("dream_user_token");
     if (token) {
@@ -118,6 +239,17 @@ export function Catalog({ onOrderCreated, userEmail = "", userPhone = "" }: Cata
       return;
     }
 
+    if (userHasPin) {
+      if (!checkoutPin) {
+        setFormError("PIN Keamanan wajib diisi untuk mengonfirmasi transaksi akun terproteksi ini.");
+        return;
+      }
+      if (!/^\d{6}$/.test(checkoutPin)) {
+        setFormError("PIN Keamanan harus berupa 6 digit angka.");
+        return;
+      }
+    }
+
     setSubmittingProof(true);
     setFormError("");
 
@@ -135,13 +267,14 @@ export function Catalog({ onOrderCreated, userEmail = "", userPhone = "" }: Cata
           email: email.trim(),
           phone: phone.trim(),
           productId: activeProduct.id,
-          paymentMethodId: selectedMethod.id
+          paymentMethodId: selectedMethod.id,
+          pin: userHasPin ? checkoutPin : undefined
         })
       });
 
       if (!res.ok) {
         const errData = await res.json();
-        throw new Error(errData.error || "Gagal membuat pesanan.");
+        throw new Error(errData.error || errData.message || "Gagal membuat pesanan.");
       }
 
       const data = await res.json();
@@ -253,36 +386,134 @@ export function Catalog({ onOrderCreated, userEmail = "", userPhone = "" }: Cata
 
   return (
     <div className="space-y-8">
-      {/* 1. Header Banner & Dynamic Search bar */}
-      <div className="relative overflow-hidden bg-slate-900 border border-slate-800 rounded-3xl p-8 md:p-12 shadow-2xl flex flex-col items-center text-center space-y-4">
-        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-white/[0.02] rounded-full blur-3xl -z-10" />
-        <div className="absolute -bottom-8 -left-8 w-[250px] h-[250px] bg-white/[0.01] rounded-full blur-2xl -z-10" />
-        
-        <div className="px-4 py-1.5 bg-white/10 hover:bg-white/15 transition border border-white/10 rounded-full text-xs font-semibold text-slate-200 tracking-wider flex items-center gap-2 uppercase font-display">
-          <ShoppingBag className="w-4 h-4 text-white" />
-          Katalog Store Digital Terbaik
-        </div>
-
-        <h1 className="font-display text-3xl md:text-5xl font-bold tracking-tight text-white max-w-2xl leading-tight">
-          Pusat Akun Premium & Subscription Tercepat
-        </h1>
-        <p className="text-slate-400 text-sm md:text-base max-w-lg leading-relaxed">
-          Dapatkan akses akun premium orisinal terlengkap. Transaksi aman, pembayaran metode dinamis, didistribusikan langsung secara otomatis !
-        </p>
-
-        {/* Dynamic Search & Category selection */}
-        <div className="w-full max-w-xl mx-auto flex flex-col md:flex-row gap-3 pt-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
-            <input
-              type="text"
-              id="search_catalog_input"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Cari Spotify, Netflix, YouTube..."
-              className="w-full pl-11 pr-4 py-3 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none focus:ring-1 focus:ring-white text-sm tracking-wide font-medium"
+      {/* 1. Interactive 3-Image Sliding Promo Carousel Banner */}
+      <div id="catalog_carousel_section" className="relative group overflow-hidden bg-slate-950 border border-slate-900 rounded-3xl h-[300px] sm:h-[380px] md:h-[450px] shadow-2xl z-10 flex flex-col justify-end">
+        {carouselSlides.map((slide, sIdx) => (
+          <div
+            key={sIdx}
+            className={`absolute inset-0 transition-all duration-1000 ease-in-out ${
+              sIdx === currentSlide 
+                ? "opacity-100 z-10 scale-100" 
+                : "opacity-0 z-0 scale-105 pointer-events-none"
+            }`}
+          >
+            {/* Background Promo Image */}
+            <img
+              src={slide.image}
+              alt={slide.title}
+              className="w-full h-full object-cover select-none"
+              referrerPolicy="no-referrer"
             />
+            
+            {/* Master reading gradient overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-slate-950/20" />
+            <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-slate-950/45 to-transparent hidden md:block" />
+
+            {/* Banner Promotional Text & CTAs */}
+            <div className="absolute inset-x-0 bottom-0 p-6 sm:p-10 md:p-14 text-left flex flex-col justify-end max-w-2xl space-y-3 sm:space-y-4">
+              <div className="flex items-center gap-2">
+                <span className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase border ${slide.badgeColor}`}>
+                  {slide.badge}
+                </span>
+              </div>
+
+              <h2 className="font-display text-xl sm:text-3.5xl md:text-4xl font-extrabold tracking-tight text-white leading-tight">
+                {slide.title}
+              </h2>
+
+              <p className="text-slate-350 text-xs sm:text-sm max-w-xl leading-relaxed font-sans">
+                {slide.desc}
+              </p>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategory(slide.category);
+                    const catalogDest = document.getElementById("catalog_products_header");
+                    if (catalogDest) {
+                      catalogDest.scrollIntoView({ behavior: "smooth" });
+                    }
+                  }}
+                  className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 active:scale-95 duration-200 transition-all text-white rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg shadow-indigo-500/10 shrink-0 select-none"
+                >
+                  {slide.buttonText}
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
           </div>
+        ))}
+
+        {/* Carousel Prev controller */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setCurrentSlide((prev) => (prev - 1 + carouselSlides.length) % carouselSlides.length);
+          }}
+          className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-900/40 hover:bg-slate-900/80 text-white/70 hover:text-white border border-white/5 opacity-0 group-hover:opacity-100 transition-all duration-300 cursor-pointer z-20 focus:outline-none"
+          title="Sebelumnya"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+
+        {/* Carousel Next controller */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setCurrentSlide((prev) => (prev + 1) % carouselSlides.length);
+          }}
+          className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-900/40 hover:bg-slate-900/80 text-white/70 hover:text-white border border-white/5 opacity-0 group-hover:opacity-100 transition-all duration-305 cursor-pointer z-20 focus:outline-none"
+          title="Selanjutnya"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+
+        {/* Dots Navigation Indicators */}
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
+          {carouselSlides.map((_, dotIdx) => (
+            <button
+              key={dotIdx}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentSlide(dotIdx);
+              }}
+              className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                dotIdx === currentSlide 
+                  ? "w-6 bg-white" 
+                  : "w-1.5 bg-white/30 hover:bg-white/60"
+              }`}
+              title={`Slide ${dotIdx + 1}`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* 2. Standalone Digital Product Search Panel */}
+      <div id="catalog_products_header" className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 md:p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="text-left">
+          <h3 className="font-display text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <ShoppingBag className="w-4 h-4 text-indigo-400" />
+            Amankan Akses Akun Premium Anda
+          </h3>
+          <p className="text-slate-400 text-xs mt-1 leading-relaxed">
+            Pilih dari bermacam produk premium tepercaya yang instan, orisinal, dan bergaransi penuh.
+          </p>
+        </div>
+        
+        <div className="relative w-full md:max-w-md shrink-0">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
+          <input
+            type="text"
+            id="search_catalog_input"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Ketik Spotify, Netflix, YouTube..."
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs tracking-wide font-medium"
+          />
         </div>
       </div>
 
@@ -390,6 +621,102 @@ export function Catalog({ onOrderCreated, userEmail = "", userPhone = "" }: Cata
           })}
         </div>
       )}
+
+      {/* 3.5. Public Reviews & Ratings Section */}
+      <div className="bg-slate-900/40 border border-slate-850/60 rounded-3xl p-6 md:p-8 space-y-6 shadow-xl relative overflow-hidden backdrop-blur-md">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/60 pb-5">
+          <div className="text-left space-y-1">
+            <span className="text-[10px] text-amber-400 font-mono tracking-widest uppercase font-bold flex items-center gap-1">
+              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-450 animate-pulse" />
+              TESTIMONI PELANGGAN REAL-TIME
+            </span>
+            <h3 className="font-display text-lg md:text-xl font-extrabold text-white tracking-tight">
+              Ulasan & Feedback Kepuasan
+            </h3>
+            <p className="text-slate-400 text-xs">
+              Ulasan tulus dari pembeli kami yang telah sukses menerima akun premium instan mereka.
+            </p>
+          </div>
+
+          <div className="shrink-0 flex items-center gap-4 bg-slate-950/50 p-4 rounded-2xl border border-slate-800/80">
+            <div className="text-center">
+              <span className="text-2xl font-mono font-bold text-white block">
+                {reviews.length > 0 
+                  ? (reviews.reduce((acc, curr) => acc + curr.rating, 0) / reviews.length).toFixed(1)
+                  : "0.0"}
+              </span>
+              <span className="text-[9px] text-slate-500 font-mono uppercase tracking-wider block">Bintang Rata-rata</span>
+            </div>
+            <div className="h-8 w-[1px] bg-slate-800" />
+            <div className="text-center">
+              <span className="text-2xl font-mono font-bold text-amber-400 block">{reviews.length}</span>
+              <span className="text-[9px] text-slate-500 font-mono uppercase tracking-wider block">Total Ulasan</span>
+            </div>
+            <div className="h-8 w-[1px] bg-slate-800" />
+            <div className="text-center">
+              <span className="text-2xl font-mono font-bold text-green-400 block">
+                {reviews.length > 0 
+                  ? Math.round((reviews.filter(r => r.rating >= 4).length / reviews.length) * 100) 
+                  : 100}%
+              </span>
+              <span className="text-[9px] text-slate-500 font-mono uppercase tracking-wider block">Tingkat Kepuasan</span>
+            </div>
+          </div>
+        </div>
+
+        {loadingReviews ? (
+          <div className="flex flex-col items-center justify-center py-8 space-y-2">
+            <RefreshCw className="w-6 h-6 text-indigo-400 animate-spin" />
+            <p className="text-slate-500 text-xs font-mono">Memuat testimoni pembeli...</p>
+          </div>
+        ) : reviews.length === 0 ? (
+          <div className="text-center py-10 bg-slate-955 border border-slate-900 rounded-2xl p-6">
+            <Star className="w-8 h-8 text-slate-700 mx-auto mb-2" />
+            <p className="text-xs text-slate-400 font-medium">Belum Ada Testimoni Pembeli</p>
+            <p className="text-[10px] text-slate-500 mt-1">Beli produk kami sekarang dan jadilah yang pertama memberikan ulasan premium!</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[420px] overflow-y-auto pr-1 select-none custom-scrollbar">
+            {reviews.map((rev) => (
+              <div 
+                key={rev.id} 
+                className="bg-slate-950/80 border border-slate-850 hover:border-slate-800 p-4 rounded-2xl flex flex-col justify-between space-y-3 transition duration-200 hover:bg-slate-950"
+              >
+                <div className="space-y-2">
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="text-[11px] font-mono font-semibold text-slate-300 block truncate" title={rev.userEmail}>
+                      {rev.userEmail}
+                    </span>
+                    <span className="text-[10px] text-slate-500 shrink-0 font-mono">
+                      {new Date(rev.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "2-digit" })}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex text-amber-400">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`w-3 h-3 ${
+                            star <= rev.rating ? "fill-amber-400 text-amber-400" : "text-slate-750"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-[9px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-md font-sans font-bold uppercase tracking-wider truncate max-w-[130px]">
+                      {rev.productName}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-300 leading-relaxed font-sans italic">
+                    "{rev.reviewText}"
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* 4. MODAL / DIALOG CHECKOUT & ORDER */}
       {activeProduct && (
@@ -501,6 +828,28 @@ export function Catalog({ onOrderCreated, userEmail = "", userPhone = "" }: Cata
                       className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 text-white rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-white transition"
                     />
                   </div>
+
+                  {userHasPin && (
+                    <div className="space-y-1.5 p-3 rounded-xl bg-indigo-500/15 border border-indigo-500/30 animate-pulse-subtle">
+                      <label className="text-[10px] uppercase text-indigo-400 font-bold font-mono tracking-wider flex items-center gap-1">
+                        <Lock className="w-3.5 h-3.5 text-indigo-400" />
+                        PIN Keamanan Terdeteksi (6 Digit)
+                      </label>
+                      <input
+                        type="password"
+                        maxLength={6}
+                        required
+                        id="buyer_pin_input"
+                        value={checkoutPin}
+                        onChange={(e) => setCheckoutPin(e.target.value.replace(/\D/g, ""))}
+                        placeholder="Masukkan 6 angka PIN keamanan akun"
+                        className="w-full px-4 py-2.5 bg-slate-950 border border-indigo-500/40 text-white rounded-xl text-center font-mono text-lg tracking-widest focus:outline-none focus:ring-1 focus:ring-indigo-500 transition"
+                      />
+                      <p className="text-[10px] text-slate-400 text-center">
+                        Email ini dilindungi PIN. Tolong masukkan PIN keamanan untuk memproses pembelian.
+                      </p>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <label className="text-xs uppercase text-slate-400 font-semibold font-display block">Pilih Metode Pembayaran</label>

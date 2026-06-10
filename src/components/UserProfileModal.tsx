@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, User, Mail, Phone, Calendar, ShoppingBag, Copy, Check, RefreshCw, LogOut, ArrowRight, Sparkles, ExternalLink } from "lucide-react";
+import { X, User, Mail, Phone, Calendar, ShoppingBag, Copy, Check, RefreshCw, LogOut, ArrowRight, Sparkles, ExternalLink, Star } from "lucide-react";
 import { Order } from "../types";
 
 interface UserProfileModalProps {
@@ -17,7 +17,7 @@ export function UserProfileModal({ isOpen, onClose, userToken, user, onLogout, o
   const [loading, setLoading] = useState(false);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
 
-  const [activeSection, setActiveSection] = useState<"orders" | "topup">("orders");
+  const [activeSection, setActiveSection] = useState<"orders" | "topup" | "pin">("orders");
   const [topups, setTopups] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [topupAmount, setTopupAmount] = useState("");
@@ -28,6 +28,89 @@ export function UserProfileModal({ isOpen, onClose, userToken, user, onLogout, o
   const [topupErrorMsg, setTopupErrorMsg] = useState("");
   const [isSubmittingTopup, setIsSubmittingTopup] = useState(false);
   const [userBalance, setUserBalance] = useState<number>(0);
+
+  // Complain & PIN states
+  const [complainTelegramUrl, setComplainTelegramUrl] = useState("https://t.me/dreamstore_support");
+  const [hasSecurityPin, setHasSecurityPin] = useState(false);
+  const [oldPin, setOldPin] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [confirmNewPin, setConfirmNewPin] = useState("");
+  const [pinSuccessMsg, setPinSuccessMsg] = useState("");
+  const [pinErrorMsg, setPinErrorMsg] = useState("");
+  const [isSavingPin, setIsSavingPin] = useState(false);
+
+  const fetchPinStatus = async () => {
+    try {
+      const res = await fetch("/api/user/pin-status", {
+        headers: { "Authorization": `Bearer ${userToken}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHasSecurityPin(data.hasPin);
+      }
+    } catch (e) {
+      console.warn("Failed fetching PIN status", e);
+    }
+  };
+
+  const fetchStoreConfigClient = async () => {
+    try {
+      const res = await fetch("/api/store-config");
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.complainTelegramUrl) {
+          setComplainTelegramUrl(data.complainTelegramUrl);
+        }
+      }
+    } catch (e) {
+      console.warn("Offline config loading", e);
+    }
+  };
+
+  const handleSavePin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinSuccessMsg("");
+    setPinErrorMsg("");
+
+    if (newPin.length !== 6 || !/^\d{6}$/.test(newPin)) {
+      setPinErrorMsg("PIN baru harus berupa 6 digit angka.");
+      return;
+    }
+    if (newPin !== confirmNewPin) {
+      setPinErrorMsg("Konfirmasi PIN baru tidak sesuai.");
+      return;
+    }
+
+    setIsSavingPin(true);
+    try {
+      const res = await fetch("/api/user/pin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${userToken}`
+        },
+        body: JSON.stringify({
+          pin: newPin,
+          oldPin: hasSecurityPin ? oldPin : undefined
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Gagal memperbarui PIN keamanan.");
+      }
+
+      setPinSuccessMsg(data.message || "PIN keamanan berhasil disimpan!");
+      setOldPin("");
+      setNewPin("");
+      setConfirmNewPin("");
+      fetchPinStatus();
+    } catch (err: any) {
+      setPinErrorMsg(err.message || "Gagal menyimpan PIN.");
+    } finally {
+      setIsSavingPin(false);
+    }
+  };
 
   const fetchProfileDetails = async () => {
     try {
@@ -78,6 +161,8 @@ export function UserProfileModal({ isOpen, onClose, userToken, user, onLogout, o
       fetchProfileDetails();
       fetchUserTopups();
       fetchPaymentMethods();
+      fetchPinStatus();
+      fetchStoreConfigClient();
     }
   }, [isOpen, userToken, initialTab]);
 
@@ -270,6 +355,20 @@ export function UserProfileModal({ isOpen, onClose, userToken, user, onLogout, o
                 <RefreshCw className="w-3.5 h-3.5" />
                 Top-Up Saldo
               </button>
+              <button
+                id="tab_active_pin"
+                onClick={() => {
+                  setActiveSection("pin");
+                  fetchPinStatus();
+                }}
+                className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition flex items-center justify-center gap-1.5 ${
+                  activeSection === "pin"
+                    ? "bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow"
+                    : "bg-slate-950 text-slate-400 border border-slate-850 hover:bg-slate-900"
+                }`}
+              >
+                Pengaturan PIN
+              </button>
             </div>
           </div>
 
@@ -389,6 +488,34 @@ export function UserProfileModal({ isOpen, onClose, userToken, user, onLogout, o
                           <pre className="text-xs text-green-300 font-mono whitespace-pre-wrap select-all py-1 select-all break-all bg-slate-950/80 p-2 rounded border border-slate-900 leading-relaxed">
                             {order.accountDelivered}
                           </pre>
+
+                          {order.rating ? (
+                            <div className="bg-slate-950/85 border border-slate-900 p-2 rounded flex justify-between items-center text-[10px] gap-2">
+                              <span className="text-slate-400 truncate max-w-[180px]">Ulasan: <span className="italic">"{order.reviewText || "Tanpa komentar"}"</span></span>
+                              <div className="flex text-amber-400 shrink-0">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <Star
+                                    key={star}
+                                    className={`w-2.5 h-2.5 ${
+                                      star <= (order.rating || 0) ? "fill-amber-400 text-amber-400" : "text-slate-700"
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onTrackOrder(order.id);
+                                onClose();
+                              }}
+                              className="w-full text-[9px] text-amber-400 hover:text-amber-300 font-mono flex items-center justify-between bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/10 p-1.5 rounded cursor-pointer transition text-left"
+                            >
+                              <span>Ulasan Belum Dibuat</span>
+                              <span className="underline font-bold font-sans flex items-center gap-0.5">Beri Rating & Ulas <ArrowRight className="w-2.5 h-2.5" /></span>
+                            </button>
+                          )}
                         </div>
                       ) : order.status === "waiting_confirmation" ? (
                         <p className="text-amber-400 bg-amber-500/5 border border-amber-500/10 p-2.5 rounded-xl text-[11px] leading-relaxed italic">
@@ -412,15 +539,26 @@ export function UserProfileModal({ isOpen, onClose, userToken, user, onLogout, o
                       <div className="flex justify-between items-center text-[10px] font-mono text-slate-500">
                         <span>Total Bayar: <span className="text-green-455 font-bold">Rp {order.paymentAmount.toLocaleString("id-ID")}</span></span>
                         
-                        <button
-                          onClick={() => {
-                            onTrackOrder(order.id);
-                            onClose();
-                          }}
-                          className="p-1 px-2.5 rounded-lg border border-slate-905 hover:border-slate-800 text-indigo-400 hover:text-white transition flex items-center gap-1 cursor-pointer bg-slate-950"
-                        >
-                          Detail & Lacak Lanjut <ArrowRight className="w-3 h-3" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={complainTelegramUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1 px-3 rounded-lg border border-red-500/30 hover:border-red-500 text-rose-400 hover:bg-red-500/10 hover:text-white transition flex items-center gap-1 cursor-pointer bg-slate-950 font-sans text-[11px] font-bold"
+                          >
+                            KOMPLAIN
+                          </a>
+
+                          <button
+                            onClick={() => {
+                              onTrackOrder(order.id);
+                              onClose();
+                            }}
+                            className="p-1 px-2.5 rounded-lg border border-slate-905 hover:border-slate-800 text-indigo-400 hover:text-white transition flex items-center gap-1 cursor-pointer bg-slate-950"
+                          >
+                            Detail & Lacak Lanjut <ArrowRight className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
 
                     </div>
@@ -583,6 +721,87 @@ export function UserProfileModal({ isOpen, onClose, userToken, user, onLogout, o
                   )}
                 </div>
 
+              </div>
+            </div>
+          )}
+
+          {/* Section 4: PIN Keamanan Setup */}
+          {activeSection === "pin" && (
+            <div className="bg-slate-950/60 border border-slate-850 p-6 rounded-2xl space-y-4 max-w-lg mx-auto">
+              <div className="text-center space-y-1">
+                <h4 className="text-base font-bold text-white font-display">Pengaturan PIN Keamanan</h4>
+                <p className="text-xs text-slate-400">
+                  {hasSecurityPin 
+                    ? "Ganti / Perbarui PIN 6-angka keamanan akun premium Anda." 
+                    : "Akun Anda belum memiliki PIN pelindung. Silakan buat PIN baru (6 Angka)."}
+                </p>
+              </div>
+
+              <form onSubmit={handleSavePin} className="space-y-4">
+                {hasSecurityPin && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">PIN Saat Ini / Lama</label>
+                    <input
+                      type="password"
+                      maxLength={6}
+                      required
+                      value={oldPin}
+                      onChange={(e) => setOldPin(e.target.value.replace(/\D/g, ""))}
+                      placeholder="Masukkan 6 angka PIN lama"
+                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 text-center font-mono text-lg tracking-widest"
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider block">PIN Baru (6 Digit)</label>
+                  <input
+                    type="password"
+                    maxLength={6}
+                    required
+                    value={newPin}
+                    onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
+                    placeholder="6 angka PIN baru"
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-indigo-500/30 text-white rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 text-center font-mono text-lg tracking-widest"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider block">Konfirmasi PIN Baru (6 Digit)</label>
+                  <input
+                    type="password"
+                    maxLength={6}
+                    required
+                    value={confirmNewPin}
+                    onChange={(e) => setConfirmNewPin(e.target.value.replace(/\D/g, ""))}
+                    placeholder="Ketik ulang 6 angka PIN baru"
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-indigo-500/30 text-white rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 text-center font-mono text-lg tracking-widest"
+                  />
+                </div>
+
+                {pinErrorMsg && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-rose-400 text-xs italic">
+                    {pinErrorMsg}
+                  </div>
+                )}
+
+                {pinSuccessMsg && (
+                  <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 text-xs font-semibold">
+                    {pinSuccessMsg}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isSavingPin}
+                  className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold rounded-xl text-center text-xs cursor-pointer transition shadow hover:shadow-indigo-500/10"
+                >
+                  {isSavingPin ? "Menyimpan..." : hasSecurityPin ? "Perbarui PIN Keamanan" : "Aktifkan PIN Keamanan"}
+                </button>
+              </form>
+
+              <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-[10px] text-slate-500 font-mono leading-relaxed text-center">
+                PENTING: PIN keamanan ini digunakan saat melakukan transaksi premium guna memproteksi saldo Anda. Jangan bagikan PIN ini ke siapa pun.
               </div>
             </div>
           )}

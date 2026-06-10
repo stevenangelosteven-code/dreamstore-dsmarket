@@ -22,6 +22,15 @@ export default function App() {
   // Banner announcement state
   const [banner, setBanner] = useState<PromoBanner | null>(null);
 
+  // Store layout and contact details state
+  const [storeConfig, setStoreConfig] = useState<{
+    footerDescription: string;
+    aboutUs: string;
+    supportEmail: string;
+    supportPhone: string;
+    copyrightText: string;
+  } | null>(null);
+
   // Admin session authentication states
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem("dream_admin_token") || "");
   const [adminUsername, setAdminUsername] = useState(() => localStorage.getItem("dream_admin_user") || "");
@@ -58,6 +67,7 @@ export default function App() {
       verifyUserToken(userToken);
     }
     fetchBanner();
+    fetchStoreConfig();
 
     // Event listener to sync user profile state instantly without full reload
     const handleSyncProfile = () => {
@@ -66,11 +76,30 @@ export default function App() {
         verifyUserToken(token);
       }
     };
+    
+    const handleSyncConfig = () => {
+      fetchStoreConfig();
+    };
+
     window.addEventListener("sync_user_profile", handleSyncProfile);
+    window.addEventListener("sync_store_config", handleSyncConfig);
     return () => {
       window.removeEventListener("sync_user_profile", handleSyncProfile);
+      window.removeEventListener("sync_store_config", handleSyncConfig);
     };
   }, []);
+
+  const fetchStoreConfig = async () => {
+    try {
+      const res = await fetch("/api/store-config");
+      if (res.ok) {
+        const data = await res.json();
+        setStoreConfig(data);
+      }
+    } catch (e) {
+      console.warn("Offline fallback for config fetch");
+    }
+  };
 
   const verifyUserToken = async (token: string) => {
     try {
@@ -432,14 +461,14 @@ export default function App() {
               <span className="font-display font-bold text-white text-sm uppercase tracking-wide">DREAM STORE</span>
             </div>
             <p className="text-xs text-slate-500 leading-relaxed max-w-sm">
-              E-Commerce penyalur akun premium, subscription membership, dan kredensial digital instan otomatis terlengkap & teraman.
+              {storeConfig?.footerDescription || "E-Commerce penyalur akun premium, subscription membership, dan kredensial digital instan otomatis terlengkap & teraman."}
             </p>
           </div>
 
           <div className="space-y-3">
             <span className="text-[10px] uppercase font-bold tracking-wider text-slate-300 block font-display">TENTANG KAMI</span>
             <p className="text-xs text-slate-500 leading-relaxed max-w-sm">
-              Platform operasional digital berkecepatan tinggi dengan integrasi auto-distribution stok kredensial digital orisinal premium.
+              {storeConfig?.aboutUs || "Platform operasional digital berkecepatan tinggi dengan integrasi auto-distribution stok kredensial digital orisinal premium."}
             </p>
           </div>
 
@@ -448,18 +477,18 @@ export default function App() {
             <div className="space-y-1.5 font-mono text-[11px] text-slate-400">
               <div className="flex items-center gap-2">
                 <Mail className="w-3.5 h-3.5 text-slate-500" />
-                <span>support@dreamstore.net</span>
+                <span>{storeConfig?.supportEmail || "support@dreamstore.net"}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Phone className="w-3.5 h-3.5 text-slate-500" />
-                <span>+62 857 1212 9999 (WhatsApp)</span>
+                <span>{storeConfig?.supportPhone || "+62 857 1212 9999 (WhatsApp)"}</span>
               </div>
             </div>
           </div>
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 border-t border-slate-900 mt-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-[11px] text-slate-500 font-mono">
-          <span>&copy; {new Date().getFullYear()} Dream Store Digital. Seluruh hak cipta dilindungi.</span>
+          <span>{storeConfig?.copyrightText || `© ${new Date().getFullYear()} Dream Store Digital. Seluruh hak cipta dilindungi. Crafted for Ultimate Speed & Aesthetics`}</span>
           <div className="flex items-center gap-4 font-mono">
             <span>Crafted for Ultimate Speed & Aesthetics</span>
             <span className="text-slate-800 hidden sm:inline">|</span>
@@ -492,7 +521,7 @@ export default function App() {
         initialTab={modalInitialTab}
       />
 
-      <CustomerServiceWidget />
+      <CustomerServiceWidget userEmail={userData?.email || ""} />
 
     </div>
   );

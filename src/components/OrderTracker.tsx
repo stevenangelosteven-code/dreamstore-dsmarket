@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Search, Copy, Check, Clock, CheckCircle, XCircle, RefreshCw, AlertCircle, Sparkles, Phone, Mail, ShoppingBag, ArrowRight, User, Key, ShieldCheck } from "lucide-react";
+import { Search, Copy, Check, Clock, CheckCircle, XCircle, RefreshCw, AlertCircle, Sparkles, Phone, Mail, ShoppingBag, ArrowRight, User, Key, ShieldCheck, Star } from "lucide-react";
 import { Order, Notification } from "../types";
 
 interface OrderTrackerProps {
@@ -19,6 +19,65 @@ export function OrderTracker({ userToken, userData }: OrderTrackerProps) {
   // Logged In History States
   const [userOrders, setUserOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+
+  // Feedback / Rating Dialog States
+  const [feedbackOrder, setFeedbackOrder] = useState<Order | null>(null);
+  const [selectedStars, setSelectedStars] = useState<number>(5);
+  const [feedbackText, setFeedbackText] = useState<string>("");
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState<boolean>(false);
+  const [feedbackSuccessMsg, setFeedbackSuccessMsg] = useState<string>("");
+  const [feedbackErrorMsg, setFeedbackErrorMsg] = useState<string>("");
+
+  const submitFeedback = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!feedbackOrder) return;
+
+    setIsSubmittingFeedback(true);
+    setFeedbackErrorMsg("");
+    setFeedbackSuccessMsg("");
+
+    try {
+      const res = await fetch(`/api/orders/${feedbackOrder.id}/review`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          rating: selectedStars,
+          reviewText: feedbackText
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Gagal mengirimkan ulasan.");
+      }
+
+      setFeedbackSuccessMsg(data.message || "Ulasan sukses dikirim! Terima kasih.");
+      
+      // Update local state list
+      setUserOrders(prevOrders => 
+        prevOrders.map(o => o.id === feedbackOrder.id ? { ...o, rating: selectedStars, reviewText: feedbackText } : o)
+      );
+
+      if (currentOrder && currentOrder.id === feedbackOrder.id) {
+        setCurrentOrder({
+          ...currentOrder,
+          rating: selectedStars,
+          reviewText: feedbackText
+        });
+      }
+      
+      // Close modal after 1.8 seconds
+      setTimeout(() => {
+        setFeedbackOrder(null);
+      }, 1800);
+    } catch (err: any) {
+      setFeedbackErrorMsg(err.message || "Gagal mengirimkan ulasan.");
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
+  };
 
   // Email Notification Lookup State
   const [userEmail, setUserEmail] = useState("");
@@ -269,6 +328,44 @@ export function OrderTracker({ userToken, userData }: OrderTrackerProps) {
                       <pre className="text-xs text-green-300 font-mono whitespace-pre-wrap select-all py-2 break-all bg-slate-950/80 p-3 rounded-lg border border-slate-900 leading-relaxed font-semibold">
                         {order.accountDelivered}
                       </pre>
+
+                      {order.rating ? (
+                        <div className="bg-slate-950/80 border border-slate-900 p-3 rounded-lg space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Ulasan Anda</span>
+                            <div className="flex text-amber-400">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`w-3.5 h-3.5 ${
+                                    star <= (order.rating || 0) ? "fill-amber-400 text-amber-400" : "text-slate-600"
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                          {order.reviewText && (
+                            <p className="text-xs text-slate-350 bg-slate-900/45 p-2 rounded border border-slate-850 italic">
+                              "{order.reviewText}"
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFeedbackOrder(order);
+                            setSelectedStars(5);
+                            setFeedbackText("");
+                            setFeedbackSuccessMsg("");
+                            setFeedbackErrorMsg("");
+                          }}
+                          className="w-full py-2 px-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 hover:border-amber-500/40 text-amber-400 rounded-xl text-[11px] font-bold tracking-wide transition cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 animate-pulse" />
+                          Nilai Pengalaman Belanja Anda
+                        </button>
+                      )}
                     </div>
                   ) : order.status === "waiting_confirmation" ? (
                     <div className="p-3 bg-amber-500/5 border border-amber-500/15 text-amber-400/90 rounded-xl leading-relaxed italic text-[11px]">
@@ -387,7 +484,7 @@ export function OrderTracker({ userToken, userData }: OrderTrackerProps) {
                 </div>
 
                 {currentOrder.status === "completed" && currentOrder.accountDelivered ? (
-                  <div className="p-4 bg-gradient-to-br from-green-950/40 to-emerald-950/10 border border-green-500/20 rounded-xl space-y-2">
+                  <div className="p-4 bg-gradient-to-br from-green-950/40 to-emerald-950/10 border border-green-500/20 rounded-xl space-y-3">
                     <span className="text-[10px] font-bold text-green-400 font-mono flex items-center gap-1">
                       <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
                       AKUN SIAP DIGUNAKAN
@@ -404,6 +501,44 @@ export function OrderTracker({ userToken, userData }: OrderTrackerProps) {
                         {copyStatus === currentOrder.id ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
                     </div>
+
+                    {currentOrder.rating ? (
+                      <div className="bg-slate-950/80 border border-slate-900 p-3 rounded-lg space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Ulasan Anda</span>
+                          <div className="flex text-amber-400 font-bold">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`w-3.5 h-3.5 ${
+                                  star <= (currentOrder.rating || 0) ? "fill-amber-400 text-amber-400" : "text-slate-600"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        {currentOrder.reviewText && (
+                          <p className="text-xs text-slate-350 bg-slate-900/45 p-2 rounded border border-slate-850 italic">
+                            "{currentOrder.reviewText}"
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFeedbackOrder(currentOrder);
+                          setSelectedStars(5);
+                          setFeedbackText("");
+                          setFeedbackSuccessMsg("");
+                          setFeedbackErrorMsg("");
+                        }}
+                        className="w-full py-2 px-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 hover:border-amber-500/40 text-amber-400 rounded-xl text-[11px] font-bold tracking-wide transition cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 animate-pulse" />
+                        Nilai Pengalaman Belanja Anda
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="p-3 bg-slate-950 border border-slate-850 rounded-lg text-slate-400 text-left italic">
@@ -488,6 +623,136 @@ export function OrderTracker({ userToken, userData }: OrderTrackerProps) {
           </div>
         )}
       </div>
+
+      {/* ========================================================= */}
+      {/* PURCHASE FEEDBACK / RATING MODAL OVERLAY                  */}
+      {/* ========================================================= */}
+      {feedbackOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 md:p-8 space-y-6 shadow-2xl relative overflow-hidden">
+            
+            {/* Top Close Button */}
+            <button
+              onClick={() => setFeedbackOrder(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg transition shrink-0 cursor-pointer"
+            >
+              <XCircle className="w-5 h-5 text-slate-400 hover:text-white" />
+            </button>
+
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded-2xl flex items-center justify-center mx-auto animate-pulse">
+                <Star className="w-6 h-6 fill-amber-500" />
+              </div>
+              
+              <h3 className="font-display font-extrabold text-white text-lg tracking-tight">
+                Nilai Pengalaman Belanja Anda
+              </h3>
+              <p className="text-xs text-slate-400 leading-normal max-w-sm mx-auto">
+                Terima kasih sudah memesan <span className="text-indigo-400 font-semibold">{feedbackOrder.productName}</span>. Kami sangat menghargai ulasan tulus Anda demi menjaga kualitas layanan kami.
+              </p>
+            </div>
+
+            <form onSubmit={submitFeedback} className="space-y-5">
+              
+              {/* Star Rating Interactive Selector */}
+              <div className="space-y-2 text-center">
+                <span className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider block">
+                  Beri Bintang Kepuasan Anda
+                </span>
+                
+                <div className="flex justify-center items-center gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setSelectedStars(star)}
+                      className="p-1 hover:scale-110 transition cursor-pointer"
+                    >
+                      <Star
+                        className={`w-8 h-8 transition-all ${
+                          star <= selectedStars
+                            ? "fill-amber-400 text-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.25)]"
+                            : "text-slate-600 hover:text-slate-500"
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+                
+                <span className="text-xs font-bold text-amber-400 font-display">
+                  {selectedStars === 5
+                    ? "Sempurna! Sangat Puas 🌟"
+                    : selectedStars === 4
+                    ? "Bagus, Puas 👍"
+                    : selectedStars === 3
+                    ? "Cukup Baik Ok 👌"
+                    : selectedStars === 2
+                    ? "Kurang Memuaskan 🙁"
+                    : "Sangat Kecewa 😡"}
+                </span>
+              </div>
+
+              {/* Text Feedback Input */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider block">
+                  Pesan Ulasan (Opsional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  placeholder="Ceritakan pengalaman Anda menggunakan akun premium ini (contoh: Admin fast-respons, akun langsung aktif...)"
+                  className="w-full px-4 py-3 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 transition text-xs leading-relaxed resize-none"
+                  maxLength={250}
+                />
+                <div className="flex justify-between items-center text-[9px] text-slate-500 font-mono">
+                  <span>Maksimal 250 karakter</span>
+                  <span>{feedbackText.length}/250</span>
+                </div>
+              </div>
+
+              {/* Status Notifications */}
+              {feedbackErrorMsg && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-xl text-center italic">
+                  {feedbackErrorMsg}
+                </div>
+              )}
+
+              {feedbackSuccessMsg && (
+                <div className="p-3.5 bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-semibold rounded-xl text-center">
+                  {feedbackSuccessMsg}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setFeedbackOrder(null)}
+                  disabled={isSubmittingFeedback}
+                  className="flex-1 py-3 bg-slate-955 hover:bg-slate-900 border border-slate-800 text-slate-400 hover:text-white font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingFeedback}
+                  className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer shadow-lg shadow-amber-500/10 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSubmittingFeedback ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <>
+                      Kirim Ulasan
+                    </>
+                  )}
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

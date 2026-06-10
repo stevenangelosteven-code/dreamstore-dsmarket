@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { 
   Lock, LayoutDashboard, Package, Key, CreditCard, ShieldAlert, ListFilter,
-  LogOut, Plus, Edit, Trash2, Check, X, Eye, FileSpreadsheet, RefreshCw, AlertCircle, FileText, Download, CheckCircle, HelpCircle, Sparkles
+  LogOut, Plus, Edit, Trash2, Check, X, Eye, FileSpreadsheet, RefreshCw, AlertCircle, FileText, Download, CheckCircle, HelpCircle, Sparkles,
+  Users, MessageSquare, Send, Star
 } from "lucide-react";
-import { Product, PaymentMethod, Order, ActivityLog, BlacklistItem, Notification, DashboardStats, ProductAccount } from "../types";
+import { Product, PaymentMethod, Order, ActivityLog, BlacklistItem, Notification, DashboardStats, ProductAccount, Review } from "../types";
 
 interface AdminPanelProps {
   adminToken: string;
@@ -13,7 +14,7 @@ interface AdminPanelProps {
 }
 
 export function AdminPanel({ adminToken, adminUsername, onLogout, onBannerUpdated }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "products" | "bulk_accounts" | "orders" | "payments" | "blacklist" | "logs" | "banner" | "topups">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "products" | "bulk_accounts" | "orders" | "payments" | "blacklist" | "logs" | "banner" | "topups" | "users" | "support" | "reviews">("dashboard");
   const [topups, setTopups] = useState<any[]>([]);
   const [loadingTopups, setLoadingTopups] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -46,6 +47,20 @@ export function AdminPanel({ adminToken, adminUsername, onLogout, onBannerUpdate
   const [bannerLinkUrl, setBannerLinkUrl] = useState("");
   const [bannerLoading, setBannerLoading] = useState(false);
 
+  // Store footer, contact channels, and customized carousel slides
+  const [footerDescription, setFooterDescription] = useState("");
+  const [aboutUs, setAboutUs] = useState("");
+  const [supportEmail, setSupportEmail] = useState("");
+  const [supportPhone, setSupportPhone] = useState("");
+  const [copyrightText, setCopyrightText] = useState("");
+  const [complainTelegramUrl, setComplainTelegramUrl] = useState("");
+  const [slides, setSlides] = useState<any[]>([
+    { image: "", badge: "", badgeColor: "", title: "", desc: "", category: "", buttonText: "" },
+    { image: "", badge: "", badgeColor: "", title: "", desc: "", category: "", buttonText: "" },
+    { image: "", badge: "", badgeColor: "", title: "", desc: "", category: "", buttonText: "" }
+  ]);
+  const [configLoading, setConfigLoading] = useState(false);
+
   // Notifications state
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
@@ -56,6 +71,8 @@ export function AdminPanel({ adminToken, adminUsername, onLogout, onBannerUpdate
   const [payments, setPayments] = useState<PaymentMethod[]>([]);
   const [blacklist, setBlacklist] = useState<BlacklistItem[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
 
   // Mutators loadings
   const [actionLoading, setActionLoading] = useState(false);
@@ -82,9 +99,149 @@ export function AdminPanel({ adminToken, adminUsername, onLogout, onBannerUpdate
   const [declineReasonText, setDeclineReasonText] = useState("");
 
   // Product Stock Accounts Reader
+  // Product Stock Accounts Reader
   const [readingStockProductId, setReadingStockProductId] = useState<string | null>(null);
   const [viewingStockAccounts, setViewingStockAccounts] = useState<ProductAccount[]>([]);
   const [loadingStockAccts, setLoadingStockAccts] = useState(false);
+
+  // === NEW USER BALANCE & CS STATES ===
+  const [users, setUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [searchUserQuery, setSearchUserQuery] = useState("");
+  const [selectedUserEmail, setSelectedUserEmail] = useState("");
+  const [balanceAdjustAmount, setBalanceAdjustAmount] = useState("");
+  const [balanceAdjustAction, setBalanceAdjustAction] = useState<"add" | "reduce">("add");
+  const [balanceAdjustReason, setBalanceAdjustReason] = useState("");
+
+  const [csSessions, setCsSessions] = useState<any[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [selectedSessionMessages, setSelectedSessionMessages] = useState<any[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [csReplyText, setCsReplyText] = useState("");
+
+  const fetchUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const res = await fetch("/api/admin/users", { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const handleAdjustBalance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserEmail || !balanceAdjustAmount || !balanceAdjustAction) {
+      setErrorMsg("Email & nominal penyesuaian saldo wajib diisi.");
+      return;
+    }
+    setActionLoading(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+    try {
+      const res = await fetch("/api/admin/users/adjust-balance", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          email: selectedUserEmail,
+          amount: parseFloat(balanceAdjustAmount),
+          actionType: balanceAdjustAction,
+          reason: balanceAdjustReason
+        })
+      });
+      if (res.ok) {
+        const result = await res.json();
+        setSuccessMsg(`Saldo pengguna ${selectedUserEmail} berhasil disesuaikan! Saldo kini Rp ${result.balance.toLocaleString("id-ID")}`);
+        setBalanceAdjustAmount("");
+        setBalanceAdjustReason("");
+        fetchUsers();
+        fetchStats();
+      } else {
+        const err = await res.json();
+        setErrorMsg(err.error || "Gagal menyesuaikan saldo pengguna.");
+      }
+    } catch (e) {
+      setErrorMsg("Terjadi kesalahan koneksi.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const fetchCsSessions = async () => {
+    setLoadingSessions(true);
+    try {
+      const res = await fetch("/api/admin/cs/sessions", { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setCsSessions(data);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingSessions(false);
+    }
+  };
+
+  const fetchSessionMessages = async (sessId: string) => {
+    setLoadingMessages(true);
+    try {
+      const res = await fetch(`/api/admin/cs/messages/${sessId}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedSessionMessages(data);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  const handleSendCsReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSessionId || !csReplyText.trim()) return;
+
+    setActionLoading(true);
+    setErrorMsg("");
+    try {
+      const res = await fetch("/api/admin/cs/reply", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          sessionId: selectedSessionId,
+          text: csReplyText.trim()
+        })
+      });
+      if (res.ok) {
+        setCsReplyText("");
+        fetchSessionMessages(selectedSessionId);
+        fetchCsSessions();
+      } else {
+        const err = await res.json();
+        setErrorMsg(err.error || "Gagal membalas pesan CS.");
+      }
+    } catch (e) {
+      setErrorMsg("Koneksi gagal.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Poll active chat thread while in CS support tab
+  useEffect(() => {
+    if (activeTab === "support" && selectedSessionId) {
+      const interval = setInterval(() => {
+        fetchSessionMessages(selectedSessionId);
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, selectedSessionId]);
 
   useEffect(() => {
     fetchStats();
@@ -100,8 +257,14 @@ export function AdminPanel({ adminToken, adminUsername, onLogout, onBannerUpdate
     if (activeTab === "payments") fetchPayments();
     if (activeTab === "blacklist") fetchBlacklist();
     if (activeTab === "logs") fetchLogs();
-    if (activeTab === "banner") fetchBannerConfig();
+    if (activeTab === "banner") {
+      fetchBannerConfig();
+      fetchStoreConfig();
+    }
     if (activeTab === "topups") fetchTopups();
+    if (activeTab === "users") fetchUsers();
+    if (activeTab === "support") fetchCsSessions();
+    if (activeTab === "reviews") fetchOrders();
   };
 
   const fetchTopups = async () => {
@@ -190,6 +353,65 @@ export function AdminPanel({ adminToken, adminUsername, onLogout, onBannerUpdate
       if (onBannerUpdated) onBannerUpdated();
     } catch (err: any) {
       setErrorMsg(err.message || "Gagal menyimpan konfigurasi banner.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const fetchStoreConfig = async () => {
+    setConfigLoading(true);
+    try {
+      const res = await fetch("/api/store-config");
+      if (res.ok) {
+        const data = await res.json();
+        if (data) {
+          setFooterDescription(data.footerDescription || "");
+          setAboutUs(data.aboutUs || "");
+          setSupportEmail(data.supportEmail || "");
+          setSupportPhone(data.supportPhone || "");
+          setCopyrightText(data.copyrightText || "");
+          setComplainTelegramUrl(data.complainTelegramUrl || "https://t.me/dreamstore_support");
+          if (Array.isArray(data.carouselSlides)) {
+            setSlides(data.carouselSlides);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Error fetching store config for admin panel", e);
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
+  const saveStoreConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+    try {
+      const res = await fetch("/api/admin/store-config", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          footerDescription,
+          aboutUs,
+          supportEmail,
+          supportPhone,
+          copyrightText,
+          complainTelegramUrl,
+          carouselSlides: slides
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Gagal memperbarui pengaturan toko.");
+      }
+
+      setSuccessMsg("Pengaturan tampilan toko (footer, info kontak & 3 banner slide) berhasil disimpan!");
+      window.dispatchEvent(new Event("sync_store_config"));
+    } catch (err: any) {
+      setErrorMsg(err.message || "Gagal menyimpan konfigurasi tampilan toko.");
     } finally {
       setActionLoading(false);
     }
@@ -723,7 +945,7 @@ export function AdminPanel({ adminToken, adminUsername, onLogout, onBannerUpdate
             }`}
           >
             <Sparkles className="w-4 h-4 text-indigo-400 animate-pulse" />
-            Banner Pengumuman
+            Self-Serve Edits (Toko/Banner)
           </button>
 
           <button
@@ -734,6 +956,36 @@ export function AdminPanel({ adminToken, adminUsername, onLogout, onBannerUpdate
           >
             <CreditCard className="w-4 h-4 text-green-400" />
             Konfirmasi Top-up Saldo ({topups.filter(t => t.status === "pending").length || "0"})
+          </button>
+
+          <button
+            onClick={() => { setActiveTab("users"); fetchUsers(); }}
+            className={`w-full text-left px-4 py-2.5 rounded-xl text-xs md:text-sm font-semibold transition flex items-center gap-2 cursor-pointer ${
+              activeTab === "users" ? "bg-white text-slate-950 font-bold" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <Users className="w-4 h-4 text-amber-500" />
+            Kelola Saldo Pengguna ({users.length || "0"})
+          </button>
+
+          <button
+            onClick={() => { setActiveTab("support"); fetchCsSessions(); }}
+            className={`w-full text-left px-4 py-2.5 rounded-xl text-xs md:text-sm font-semibold transition flex items-center gap-2 cursor-pointer ${
+              activeTab === "support" ? "bg-white text-slate-950 font-bold" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <MessageSquare className="w-4 h-4 text-sky-400 animate-pulse" />
+            Pertanyaan CS & Support ({csSessions.filter(s => s.unreadCount > 0).length || "0"})
+          </button>
+
+          <button
+            onClick={() => { setActiveTab("reviews"); fetchOrders(); }}
+            className={`w-full text-left px-4 py-2.5 rounded-xl text-xs md:text-sm font-semibold transition flex items-center gap-2 cursor-pointer ${
+              activeTab === "reviews" ? "bg-white text-slate-950 font-bold" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <Star className="w-4 h-4 text-amber-400 fill-amber-450" />
+            Ulasan & Feedback Produk ({orders.filter(o => o.rating && o.rating > 0).length || "0"})
           </button>
         </nav>
 
@@ -1128,7 +1380,19 @@ export function AdminPanel({ adminToken, adminUsername, onLogout, onBannerUpdate
                             <div className="truncate font-semibold text-slate-200" title={o.userEmail}>{o.userEmail}</div>
                             <div className="text-slate-500 font-mono text-[10px]">{o.userPhone}</div>
                           </td>
-                          <td className="p-4 text-slate-300 text-xs font-semibold">{o.productName}</td>
+                          <td className="p-4 text-slate-300 text-xs font-semibold">
+                            <div>{o.productName}</div>
+                            {o.rating && (
+                              <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-400 font-mono">
+                                <span className="font-bold">⭐ {o.rating}/5</span>
+                                {o.reviewText && (
+                                  <span className="text-slate-400 italic max-w-[125px] truncate block" title={o.reviewText}>
+                                    ({o.reviewText})
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </td>
                           <td className="p-4 font-mono text-green-400">
                             Rp {o.paymentAmount.toLocaleString("id-ID")}
                             <div className="text-[9px] text-slate-500 font-normal">{o.paymentMethodName}</div>
@@ -1411,170 +1675,416 @@ export function AdminPanel({ adminToken, adminUsername, onLogout, onBannerUpdate
             TAB 8: ANNOUNCEMENT & PROMO BANNER SETTINGS
             ========================================== */}
         {activeTab === "banner" && (
-          <div className="space-y-6 animate-fade-in">
+          <div className="space-y-8 animate-fade-in text-xs md:text-sm">
+            
+            {/* Header */}
             <div>
               <h2 className="font-display font-bold text-2xl text-white flex items-center gap-2">
                 <Sparkles className="w-6 h-6 text-indigo-400 animate-pulse" />
-                Manajemen Banner Pengumuman
+                Pengaturan Tampilan Toko & Banner
               </h2>
-              <p className="text-slate-400 text-xs">Atur teks informasi, diskon besar, kupon, atau pemberitahuan server untuk disiarkan di bagian paling atas toko.</p>
+              <p className="text-slate-400 text-xs">Atur teks promo, 3 slide banner gambar beranda utama, informasi footer, kontak bantuan darurat, dan hak cipta digital Anda.</p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* ERROR & SUCCESS DISPLAYS */}
+            {(errorMsg || successMsg) && (
+              <div id="status_alert_box" className="p-4 rounded-xl border border-slate-850 bg-slate-950 font-mono text-[11px] flex flex-col gap-1">
+                {errorMsg && <p className="text-rose-450 font-bold text-red-400">❌ Gagal: {errorMsg}</p>}
+                {successMsg && <p className="text-green-450 font-bold text-green-400">✔ Sukses: {successMsg}</p>}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
               
-              {/* Configuration Form Card (2/3 width on desktop) */}
-              <div className="lg:col-span-2 bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-6">
-                <div className="border-b border-slate-800 pb-3 flex justify-between items-center">
-                  <h3 className="font-display font-semibold text-white text-sm">Konfigurasi Siaran Banner</h3>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${bannerIsActive ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'bg-slate-800 text-slate-500 border border-slate-700/50'}`}>
-                    {bannerIsActive ? 'SIARAN AKTIF' : 'SIARAN MATI'}
-                  </span>
-                </div>
-
-                {bannerLoading ? (
-                  <p className="text-slate-500 text-xs font-mono py-4">Memuat data banner terbaru...</p>
-                ) : (
-                  <form onSubmit={saveBannerConfig} className="space-y-5">
-                    
-                    {/* Teks Informasi Banner */}
-                    <div className="space-y-2">
-                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Isi Teks Pengumuman</label>
-                      <textarea
-                        required
-                        rows={3}
-                        value={bannerText}
-                        onChange={(e) => setBannerText(e.target.value)}
-                        placeholder="Selamat datang di Dream Store! Silakan pesan hari ini dan dapatkan promo diskon..."
-                        className="w-full p-3 bg-slate-950 border border-slate-800 text-white rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
-                      />
-                      <span className="text-[10px] text-slate-500 block">Isikan pengumuman toko yang singkat, berbobot, dan menarik bagi kunjungan pembeli.</span>
+              {/* Left Column: Form Settings (8/12 space) */}
+              <div className="lg:col-span-8 space-y-8 animate-fade-in">
+                
+                {/* SETTING 1: TOP RUNNING BAR ANNOUNCEMENT BANNER */}
+                <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-6">
+                  <div className="border-b border-slate-800 pb-3 flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-violet-500 animate-ping"></div>
+                      <h3 className="font-display font-semibold text-white text-sm">1. Banner Siaran Pengumuman Atas</h3>
                     </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${bannerIsActive ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'bg-slate-800 text-slate-500 border border-slate-700/50'}`}>
+                      {bannerIsActive ? 'AKTIF' : 'NONAKTIF'}
+                    </span>
+                  </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      
-                      {/* Banner Status Visibility Selector */}
+                  {bannerLoading ? (
+                    <p className="text-slate-500 text-xs font-mono py-4">Memuat data siaran...</p>
+                  ) : (
+                    <form onSubmit={saveBannerConfig} className="space-y-4">
                       <div className="space-y-2">
-                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Status Hub Siaran</label>
-                        <select
-                          value={bannerIsActive ? "true" : "false"}
-                          onChange={(e) => setBannerIsActive(e.target.value === "true")}
-                          className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 text-white rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        >
-                          <option value="true">Aktifkan (Siarkan Publik)</option>
-                          <option value="false">Nonaktifkan (Sembunyikan)</option>
-                        </select>
-                      </div>
-
-                      {/* Optional Target Link Redirect on User Select */}
-                      <div className="space-y-2">
-                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Link Alamat Klik (Opsional)</label>
-                        <input
-                          type="url"
-                          value={bannerLinkUrl}
-                          onChange={(e) => setBannerLinkUrl(e.target.value)}
-                          placeholder="https://t.me/dreamstore_updates"
-                          className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 text-white rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Isi Teks Pengumuman</label>
+                        <textarea
+                          required
+                          rows={2}
+                          value={bannerText}
+                          onChange={(e) => setBannerText(e.target.value)}
+                          placeholder="Selamat datang di Dream Store! Nikmati kemudahan berbelanja..."
+                          className="w-full p-3 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
                         />
                       </div>
 
-                    </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Status Penyiaran</label>
+                          <select
+                            value={bannerIsActive ? "true" : "false"}
+                            onChange={(e) => setBannerIsActive(e.target.value === "true")}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none text-xs"
+                          >
+                            <option value="true">Aktifkan (Tampilkan Atas)</option>
+                            <option value="false">Nonaktifkan (Sembunyikan)</option>
+                          </select>
+                        </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                        <div className="space-y-2">
+                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Link Pengalihan Klik (Opsional)</label>
+                          <input
+                            type="text"
+                            value={bannerLinkUrl}
+                            onChange={(e) => setBannerLinkUrl(e.target.value)}
+                            placeholder="https://t.me/yourgroup"
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Warna Latar (Banner Style)</label>
+                          <select
+                            value={bannerBgColor}
+                            onChange={(e) => setBannerBgColor(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none font-mono text-xs"
+                          >
+                            <option value="bg-slate-900 border-b border-indigo-500/30">Elegant Slate Blue</option>
+                            <option value="bg-indigo-600">Pure Indigo Solid</option>
+                            <option value="bg-gradient-to-r from-red-600 to-amber-500">Flame Amber Fire</option>
+                            <option value="bg-gradient-to-r from-emerald-600 to-teal-500">Emerald Glow</option>
+                            <option value="bg-slate-950 border-b border-rose-500/20">Danger Blood Red</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Warna Teks Font</label>
+                          <select
+                            value={bannerTextColor}
+                            onChange={(e) => setBannerTextColor(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none font-mono text-xs"
+                          >
+                            <option value="text-white">Putih Bersih</option>
+                            <option value="text-indigo-200">Indigo Muted</option>
+                            <option value="text-yellow-200">Golden Glow</option>
+                            <option value="text-slate-200">Muted Slate</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="pt-2">
+                        <button
+                          id="btn_save_banner_settings"
+                          type="submit"
+                          disabled={actionLoading}
+                          className="w-full py-2.5 bg-indigo-500 hover:bg-indigo-600 font-bold uppercase text-xs tracking-wider rounded-xl transition cursor-pointer text-white shadow-lg shadow-indigo-500/10"
+                        >
+                          {actionLoading ? "Menyimpan..." : "Simpan & Terapkan Banner Melayang"}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+
+                {/* SETTING 2: HOME SLIDER INTERACTIVE 3 CAROUSEL SLIDES */}
+                <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-6">
+                  <div className="border-b border-slate-800 pb-3">
+                    <h3 className="font-display font-semibold text-white text-sm">2. Kustomisasi Gambar & Teks 3 Slider Beranda Utama</h3>
+                    <p className="text-slate-400 text-[11px] mt-0.5">Edit konten, gambar, lencana lencana penjelas, serta tombol tindakan pada 3 slide beranda slider utama di Catalog.</p>
+                  </div>
+
+                  {configLoading ? (
+                    <p className="text-slate-500 text-xs font-mono py-4">Memuat data konfigurasi slide...</p>
+                  ) : (
+                    <form onSubmit={saveStoreConfig} className="space-y-8">
                       
-                      {/* Background Styling Tailwind Class presets */}
-                      <div className="space-y-2">
-                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Tema Warna Latar Belakang (CSS Class Presets)</label>
-                        <select
-                          value={bannerBgColor}
-                          onChange={(e) => setBannerBgColor(e.target.value)}
-                          className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 text-white rounded-xl text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        >
-                          <option value="bg-slate-900 border-b border-indigo-500/30">Indigo Border (Slate Elegant)</option>
-                          <option value="bg-indigo-600">Indigo Solid (Sangat Menarik)</option>
-                          <option value="bg-gradient-to-r from-red-600 to-amber-500">Amber Flame Fire (Promo Panas)</option>
-                          <option value="bg-gradient-to-r from-emerald-600 to-teal-500">Green Glow Leaf (Rilis Aman/Aktif)</option>
-                          <option value="bg-slate-950 border-b border-rose-500/20">Danger Blood (Masalah Teknis/Sistem)</option>
-                        </select>
+                      {/* Loop for 3 slides */}
+                      {slides.map((slide, idx) => (
+                        <div key={idx} className="bg-slate-950/70 p-5 rounded-2xl border border-slate-850 space-y-4">
+                          <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+                            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold font-mono">
+                              0{idx + 1}
+                            </span>
+                            <span className="text-xs font-bold text-slate-300 uppercase tracking-widest font-display">Slide {idx + 1}</span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            
+                            <div className="space-y-1.5 align-middle">
+                              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">URL Gambar Slide (Opsional untuk default)</label>
+                              <input
+                                type="text"
+                                value={slide.image || ""}
+                                onChange={(e) => {
+                                  const updated = [...slides];
+                                  updated[idx].image = e.target.value;
+                                  setSlides(updated);
+                                }}
+                                placeholder="Gunakan URL link gambar baru atau kosongkan ke default"
+                                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none text-xs"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Badge Badge Overlay (e.g. "STREAMING VIP")</label>
+                              <input
+                                type="text"
+                                required
+                                value={slide.badge || ""}
+                                onChange={(e) => {
+                                  const updated = [...slides];
+                                  updated[idx].badge = e.target.value;
+                                  setSlides(updated);
+                                }}
+                                placeholder="STREAMING VIP"
+                                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none font-bold uppercase text-xs"
+                              />
+                            </div>
+
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Judul Utama Slide</label>
+                              <input
+                                type="text"
+                                required
+                                value={slide.title || ""}
+                                onChange={(e) => {
+                                  const updated = [...slides];
+                                  updated[idx].title = e.target.value;
+                                  setSlides(updated);
+                                }}
+                                placeholder="Judul besar promo..."
+                                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none text-xs"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Teks Tombol CTA</label>
+                              <input
+                                type="text"
+                                required
+                                value={slide.buttonText || ""}
+                                onChange={(e) => {
+                                  const updated = [...slides];
+                                  updated[idx].buttonText = e.target.value;
+                                  setSlides(updated);
+                                }}
+                                placeholder="Beli Sekarang / Eksplor"
+                                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none text-xs"
+                              />
+                            </div>
+
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Deskripsi Singkat Promo</label>
+                            <textarea
+                              required
+                              rows={2}
+                              value={slide.desc || ""}
+                              onChange={(e) => {
+                                const updated = [...slides];
+                                updated[idx].desc = e.target.value;
+                                setSlides(updated);
+                              }}
+                              placeholder="Keterangan singkat tentang apa yang ditawarkan oleh slide promo ini..."
+                              className="w-full p-3 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none text-xs"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Kategori Pintasan Katalog (Fungsi Klik)</label>
+                              <input
+                                type="text"
+                                required
+                                value={slide.category || ""}
+                                onChange={(e) => {
+                                  const updated = [...slides];
+                                  updated[idx].category = e.target.value;
+                                  setSlides(updated);
+                                }}
+                                placeholder="Streaming / Premium / Design"
+                                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none text-xs"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Preset Warna Badge (Tailwind Class)</label>
+                              <select
+                                value={slide.badgeColor || ""}
+                                onChange={(e) => {
+                                  const updated = [...slides];
+                                  updated[idx].badgeColor = e.target.value;
+                                  setSlides(updated);
+                                }}
+                                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none font-mono text-xs"
+                              >
+                                <option value="bg-indigo-500/20 text-indigo-300 border-indigo-500/30">Violet Light Border</option>
+                                <option value="bg-emerald-500/20 text-emerald-300 border-emerald-500/30">Green Emerald Border</option>
+                                <option value="bg-amber-500/20 text-amber-300 border-amber-500/30">Orange Amber Border</option>
+                                <option value="bg-rose-500/20 text-rose-300 border-rose-500/30">Rose Pink Border</option>
+                                <option value="bg-cyan-500/20 text-cyan-300 border-cyan-500/30">Cyan Glow Border</option>
+                              </select>
+                            </div>
+
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* SETTING 3: FOOTER STATIC TEXTS & CONTACT SERVICES */}
+                      <div className="border-t border-slate-800/80 pt-6 space-y-6">
+                        <div>
+                          <h4 className="font-display font-semibold text-white text-sm">3. Kustomisasi Teks Footer, Deskripsi Tentang Kami & Kontak</h4>
+                          <p className="text-slate-500 text-[10.5px]">Ubah tulisan deskripsi e-commerce, visi misi Tentang Kami, serta info email / no WhatsApp WhatsApp di area footer paling bawah website.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          
+                          <div className="space-y-1.5 font-mono">
+                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block font-sans">Deskripsi Footer E-Commerce</label>
+                            <textarea
+                              required
+                              rows={3}
+                              value={footerDescription}
+                              onChange={(e) => setFooterDescription(e.target.value)}
+                              placeholder="E-Commerce penyalur akun premium subscription digital instan..."
+                              className="w-full p-3 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none text-xs font-sans leading-relaxed text-slate-350"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5 font-mono">
+                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block font-sans">Tentang Kami (Visual Teks)</label>
+                            <textarea
+                              required
+                              rows={3}
+                              value={aboutUs}
+                              onChange={(e) => setAboutUs(e.target.value)}
+                              placeholder="Platform operasional berkecepatan tinggi..."
+                              className="w-full p-3 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none text-xs font-sans leading-relaxed text-slate-350"
+                            />
+                          </div>
+
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Email Layanan Darurat</label>
+                            <input
+                              type="email"
+                              required
+                              value={supportEmail}
+                              onChange={(e) => setSupportEmail(e.target.value)}
+                              placeholder="support@dreamstore.net"
+                              className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none font-mono text-xs"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Nomor WhatsApp Bantuan</label>
+                            <input
+                              type="text"
+                              required
+                              value={supportPhone}
+                              onChange={(e) => setSupportPhone(e.target.value)}
+                              placeholder="+62 857 1212 9999 (WhatsApp)"
+                              className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none font-mono text-xs"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider block">Link Telegram Komplain / Layanan</label>
+                            <input
+                              type="text"
+                              required
+                              value={complainTelegramUrl}
+                              onChange={(e) => setComplainTelegramUrl(e.target.value)}
+                              placeholder="https://t.me/yourusername"
+                              className="w-full px-3 py-2.5 bg-slate-950 border border-indigo-500/30 text-white rounded-xl focus:outline-none font-mono text-xs focus:ring-1 focus:ring-indigo-500"
+                            />
+                          </div>
+
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block font-sans">Teks Hak Cipta & Disclaimer (Copyright Text)</label>
+                          <input
+                            type="text"
+                            required
+                            value={copyrightText}
+                            onChange={(e) => setCopyrightText(e.target.value)}
+                            className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none text-xs leading-relaxed"
+                          />
+                        </div>
+
                       </div>
 
-                      {/* Text/Font Styling Color Theme */}
-                      <div className="space-y-2">
-                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Warna Teks Font</label>
-                        <select
-                          value={bannerTextColor}
-                          onChange={(e) => setBannerTextColor(e.target.value)}
-                          className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 text-white rounded-xl text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      <div className="pt-4 border-t border-slate-800">
+                        <button
+                          id="btn_save_configex"
+                          type="submit"
+                          disabled={actionLoading}
+                          className="w-full py-3 bg-white text-slate-950 hover:bg-slate-100 font-extrabold uppercase text-xs tracking-widest rounded-xl transition cursor-pointer shadow hover:shadow-indigo-500/10 flex items-center justify-center gap-2"
                         >
-                          <option value="text-white">Putih Terang (text-white)</option>
-                          <option value="text-indigo-200">Rileks Indigo Soft (text-indigo-200)</option>
-                          <option value="text-yellow-200">Glow Gold Amber (text-yellow-200)</option>
-                          <option value="text-slate-200">Kustom Muted Slate (text-slate-200)</option>
-                        </select>
+                          {actionLoading ? "Menyimpan Perubahan..." : "Simpan Beranda Slider & Teks Footer"}
+                        </button>
                       </div>
 
-                    </div>
+                    </form>
+                  )}
+                </div>
 
-                    <button
-                      id="btn_save_banner_settings"
-                      type="submit"
-                      disabled={actionLoading}
-                      className="w-full py-3 bg-white text-slate-950 hover:bg-slate-200 font-extrabold text-xs uppercase tracking-wide rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow hover:shadow-white/5"
-                    >
-                      {actionLoading ? "Menyimpan Perubahan..." : "Simpan & Siarkan Banner"}
-                    </button>
-
-                  </form>
-                )}
               </div>
 
-              {/* LIVE REAL-TIME PREVIEW CONTAINER */}
-              <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl flex flex-col justify-between h-fit space-y-4">
-                <div className="border-b border-slate-800 pb-3">
-                  <h3 className="font-display font-semibold text-white text-sm">Pratinjau Instan Layar Pembeli</h3>
-                  <p className="text-slate-500 text-[11px] mt-0.5">Berikut adalah simulasi responsif bagaimana pembeli melihat pengumuman ini pada beranda.</p>
-                </div>
-
-                <div className="bg-slate-950 rounded-xl p-4 border border-slate-850 space-y-4 relative overflow-hidden min-h-[160px] flex flex-col justify-center">
-                  
-                  {/* Status Simulated Badge */}
-                  <div className="absolute top-2.5 right-3 text-[8px] font-mono font-bold tracking-widest text-slate-600 uppercase">
-                    Modul Beranda Store
+              {/* Right Column: Dynamic Preview Info (4/12 space) */}
+              <div className="lg:col-span-4 space-y-6">
+                
+                <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-xl space-y-4 h-fit">
+                  <div className="border-b border-slate-800 pb-2">
+                    <h3 className="font-display font-semibold text-white text-sm">💡 Info Penyesuaian Toko</h3>
+                    <p className="text-slate-500 text-[11px] mt-0.5">Panduan kustomisasi cepat untuk admin.</p>
                   </div>
 
-                  {bannerIsActive && bannerText ? (
-                    <div className={`${bannerBgColor} ${bannerTextColor} text-[11px] py-2 px-3 rounded-lg flex items-center justify-center text-center gap-1.5 shadow-sm overflow-hidden text-ellipsis leading-snug`}>
-                      <Sparkles className="w-3 h-3 text-amber-300 animate-pulse shrink-0" />
-                      <span className="font-semibold line-clamp-2">{bannerText}</span>
-                      {bannerLinkUrl && (
-                        <span className="underline text-[10px] whitespace-nowrap inline-block shrink-0">Buka Link</span>
-                      )}
+                  <div className="space-y-3 font-mono text-[10.5px] text-slate-400">
+                    <div className="p-3 bg-slate-950 rounded-xl space-y-1">
+                      <span className="text-indigo-400 font-bold block uppercase border-b border-slate-900 pb-0.5">Slider Gambar Default</span>
+                      <p className="text-slate-500 leading-relaxed text-[10px]">Apabila link gambar dikosongkan, lencana slider kustom akan otomatis menggunakan gambar promo default bertema neon futuristik agar estetika visual tetap luar biasa.</p>
                     </div>
-                  ) : (
-                    <div className="text-center py-6 text-slate-600 italic text-xs leading-relaxed">
-                      Sistem penyiaran dimatikan. Banner tidak akan mengganggu visual pembeli sama sekali.
-                    </div>
-                  )}
 
-                  <div className="border-t border-slate-900/60 pt-3 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <div className="relative flex items-center justify-center w-5 h-5 rounded bg-indigo-600 text-white font-display font-black text-[9px]">DS</div>
-                      <span className="text-[9.5px] font-bold text-slate-400">Dream Store Header</span>
+                    <div className="p-3 bg-slate-950 rounded-xl space-y-1">
+                      <span className="text-emerald-400 font-bold block uppercase border-b border-slate-900 pb-0.5">Real-time Synchronization</span>
+                      <p className="text-slate-500 leading-relaxed text-[10px]">Seluruh perubahan yang disubmit di halaman ini akan diproporasikan langsung ke seluruh UI klien beranda & footer secara realtime instan tanpa perlu reload halaman.</p>
                     </div>
-                    <span className="text-[8px] font-mono text-slate-500">Auto-Refreshed UI</span>
                   </div>
-
                 </div>
 
-                <div className="p-4 bg-slate-950/60 border border-slate-850/60 rounded-xl space-y-2">
-                  <span className="text-xs font-semibold text-indigo-400 block font-display">💡 Tips Pengguna</span>
+                <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-xl space-y-3">
+                  <span className="text-xs font-semibold text-indigo-400 block font-display">💡 Tips Desain Slider</span>
                   <p className="text-slate-500 text-[11px] leading-relaxed">
-                    Gunakan banner untuk mengumumkan pelunasan stok, promo hari raya kustom, status libur pengiriman admin, ataupun rilis platform untuk meningkatkan konversi penjualan digital Anda.
+                    Gunakan Unsplash dengan format visual lanskap gelap berkualitas tinggi (`https://images.unsplash.com/...`) untuk warna background promo visual agar kontras teks putih di atasnya terbaca dengan nyaman & premium.
                   </p>
                 </div>
 
               </div>
 
             </div>
+
           </div>
         )}
 
@@ -1620,6 +2130,7 @@ export function AdminPanel({ adminToken, adminUsername, onLogout, onBannerUpdate
                       <th className="p-4">Pembeli (User)</th>
                       <th className="p-4">Nominal</th>
                       <th className="p-4">Metode Bayar</th>
+                      <th className="p-4 text-center">Bukti Transfer</th>
                       <th className="p-4">Status</th>
                       <th className="p-4 text-right">Aksi Tindakan</th>
                     </tr>
@@ -1642,6 +2153,18 @@ export function AdminPanel({ adminToken, adminUsername, onLogout, onBannerUpdate
                         </td>
                         <td className="p-4 text-slate-300 font-mono text-xs">
                           {t.paymentMethodName}
+                        </td>
+                        <td className="p-4 text-center">
+                          {t.paymentProofUrl ? (
+                            <button
+                              onClick={() => setViewProofUrl(t.paymentProofUrl || null)}
+                              className="px-2 py-1 bg-slate-950 border border-slate-800 text-blue-400 hover:text-blue-300 font-mono font-bold text-[10px] rounded transition cursor-pointer"
+                            >
+                              LIHAT BUKTI
+                            </button>
+                          ) : (
+                            <span className="text-slate-500 font-mono text-[10px]">TANPA STRUK</span>
+                          )}
                         </td>
                         <td className="p-4">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider font-mono ${
@@ -1686,6 +2209,484 @@ export function AdminPanel({ adminToken, adminUsername, onLogout, onBannerUpdate
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ==========================================
+            TAB 10: KELOLA SALDO PENGGUNA (WALLET ADJUSTMENTS)
+            ========================================== */}
+        {activeTab === "users" && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 space-y-6">
+            <div className="flex justify-between items-center flex-wrap gap-4 border-b border-slate-800/60 pb-5">
+              <div>
+                <h2 className="font-display font-bold text-2xl text-white flex items-center gap-2 text-left">
+                  <Users className="w-6 h-6 text-amber-500" />
+                  Kelola Saldo Pengguna
+                </h2>
+                <p className="text-xs text-slate-400 mt-1 text-left font-sans">
+                  Atur atau sesuaikan saldo dompet digital pembeli (tambah/kurang) secara manual.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Form Penyesuaian Saldo */}
+              <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-5 space-y-4 lg:col-span-1 h-fit">
+                <h3 className="text-xs uppercase tracking-wider font-bold text-slate-300 flex items-center gap-1.5 border-b border-slate-800 pb-2 text-left font-sans">
+                  <span className="w-1.5 h-3 bg-amber-500 rounded-full"></span>
+                  Form Penyesuaian Saldo
+                </h3>
+                <form onSubmit={handleAdjustBalance} className="space-y-4 text-left">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 uppercase font-bold block text-left">Email Pengguna*</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="Pilih pengguna di bawah atau ketik..."
+                      value={selectedUserEmail}
+                      onChange={(e) => setSelectedUserEmail(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 text-white rounded-lg text-xs font-mono focus:outline-none focus:ring-1 focus:ring-amber-500 transition"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 uppercase font-bold block text-left">Tipe Aksi*</label>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => setBalanceAdjustAction("add")}
+                        className={`py-1.5 rounded-lg text-[10px] font-bold border transition cursor-pointer font-sans ${
+                          balanceAdjustAction === "add"
+                            ? "bg-emerald-500/15 border-emerald-500 text-emerald-400 font-bold"
+                            : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        Tambah Saldo (+)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBalanceAdjustAction("reduce")}
+                        className={`py-1.5 rounded-lg text-[10px] font-bold border transition cursor-pointer font-sans ${
+                          balanceAdjustAction === "reduce"
+                            ? "bg-rose-500/15 border-rose-500 text-rose-400 font-bold"
+                            : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        Kurangi Saldo (-)
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 uppercase font-bold block text-left font-sans">Nominal Saldo (Rupiah)*</label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      placeholder="e.g. 5000"
+                      value={balanceAdjustAmount}
+                      onChange={(e) => setBalanceAdjustAmount(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 text-white rounded-lg text-xs font-mono font-bold focus:outline-none focus:ring-1 focus:ring-amber-500 transition"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 uppercase font-bold block text-left font-sans">Alasan Penyesuaian*</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Bonus Event / Refund Manual"
+                      value={balanceAdjustReason}
+                      onChange={(e) => setBalanceAdjustReason(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 text-white rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-amber-500 transition"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={actionLoading}
+                    className="w-full py-2 bg-amber-500 hover:bg-amber-600 active:scale-95 duration-200 cursor-pointer text-slate-950 font-bold rounded-lg text-xs shadow-md transition disabled:opacity-50 font-sans"
+                  >
+                    {actionLoading ? "Memproses..." : `Proses ${balanceAdjustAction === "add" ? "Penambahan" : "Pengurangan"}`}
+                  </button>
+                </form>
+              </div>
+
+              {/* Tabel Pengguna Terdaftar */}
+              <div className="bg-slate-950/20 border border-slate-800/60 rounded-xl p-5 lg:col-span-2 space-y-4">
+                <div className="flex justify-between items-center flex-wrap gap-3">
+                  <h3 className="text-sm font-bold text-slate-200 font-sans">Daftar Pengguna Aktif</h3>
+                  <div className="relative w-full max-w-sm">
+                    <input
+                      type="text"
+                      placeholder="Cari user (nama/email)..."
+                      value={searchUserQuery}
+                      onChange={(e) => setSearchUserQuery(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 text-white rounded-xl text-xs sm:w-64 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition text-left"
+                    />
+                  </div>
+                </div>
+
+                {loadingUsers ? (
+                  <div className="text-center py-10 font-mono text-xs text-slate-500">
+                    Memuat daftar pengguna...
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-800 text-slate-400 font-mono font-bold uppercase tracking-wider text-[10px]">
+                          <th className="p-3">Nama</th>
+                          <th className="p-3">Email</th>
+                          <th className="p-3 text-right">Saldo Dompet</th>
+                          <th className="p-3 text-center">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users
+                          .filter(u => 
+                            u.name.toLowerCase().includes(searchUserQuery.toLowerCase()) || 
+                            u.email.toLowerCase().includes(searchUserQuery.toLowerCase())
+                          )
+                          .map((u) => (
+                            <tr key={u.id} className="border-b border-slate-850 hover:bg-slate-900/40 text-slate-300">
+                              <td className="p-3 font-semibold text-slate-200 text-left">{u.name}</td>
+                              <td className="p-3 font-mono text-slate-400 text-left">{u.email}</td>
+                              <td className="p-3 text-right font-mono font-bold text-amber-400">
+                                Rp {(u.balance || 0).toLocaleString("id-ID")}
+                              </td>
+                              <td className="p-3 text-center">
+                                <button
+                                  onClick={() => {
+                                    setSelectedUserEmail(u.email);
+                                    setBalanceAdjustAmount("");
+                                    setBalanceAdjustReason("");
+                                  }}
+                                  className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/25 text-amber-400 rounded text-[10px] font-bold cursor-pointer transition"
+                                >
+                                  Pilih & Atur
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        {users.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="text-center py-8 text-slate-500 italic font-mono uppercase tracking-wider">
+                              Tidak ada pengguna terdaftar.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        {/* ==========================================
+            TAB 11: LAYANAN CS & CHAT SUPPORT REPLIES
+            ========================================== */}
+        {activeTab === "support" && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 space-y-6">
+            <div className="flex justify-between items-center flex-wrap gap-4 border-b border-slate-800/60 pb-5">
+              <div>
+                <h2 className="font-display font-bold text-2xl text-white flex items-center gap-2 text-left">
+                  <MessageSquare className="w-6 h-6 text-sky-400 animate-pulse" />
+                  Pesan CS & Support Chat
+                </h2>
+                <p className="text-xs text-slate-400 mt-1 text-left font-sans">
+                  Balas pesan pelanggan virtual Anda secara langsung untuk memberikan pelayanan premium.
+                </p>
+              </div>
+              <span className="text-[10px] font-mono px-2.5 py-1 bg-sky-500/15 text-sky-400 border border-sky-400/20 rounded-full font-bold uppercase tracking-wider animate-pulse flex items-center gap-1.5 h-fit">
+                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span> Live Stream Aktif
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[510px] overflow-hidden">
+              {/* Left Column: Chat Inbox Threads list */}
+              <div className="bg-slate-950/60 border border-slate-800 rounded-xl overflow-y-auto flex flex-col md:col-span-1 h-full">
+                <div className="p-3 border-b border-slate-800 bg-slate-950 font-semibold text-xs text-slate-300 uppercase tracking-wider font-mono text-left">
+                  Daftar Obrolan
+                </div>
+                {loadingSessions ? (
+                  <div className="text-center p-8 text-xs font-mono text-slate-500">Memuat sesi chat...</div>
+                ) : (
+                  <div className="flex-1 divide-y divide-slate-850">
+                    {csSessions.map((session) => (
+                      <button
+                        key={session.sessionId}
+                        onClick={() => {
+                          setSelectedSessionId(session.sessionId);
+                          fetchSessionMessages(session.sessionId);
+                        }}
+                        className={`w-full text-left p-3 flex flex-col gap-1 hover:bg-slate-900/65 transition cursor-pointer ${
+                          selectedSessionId === session.sessionId ? "bg-slate-900 border-l-2 border-sky-400" : ""
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-200 truncate pr-2">
+                            {session.userEmail || `Guest (${session.sessionId.substring(session.sessionId.length - 8)})`}
+                          </span>
+                          {session.unreadCount > 0 && (
+                            <span className="shrink-0 bg-sky-500 text-slate-950 text-[8px] font-mono font-extrabold px-1.5 py-0.5 rounded">
+                              NEW
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 truncate text-left italic">
+                          "{session.lastMessage}"
+                        </p>
+                        <span className="text-[9px] text-slate-600 font-mono text-left">
+                          {new Date(session.lastTime).toLocaleString("id-ID", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" })}
+                        </span>
+                      </button>
+                    ))}
+                    {csSessions.length === 0 && (
+                      <div className="text-center p-12 text-slate-500 italic text-xs font-mono uppercase tracking-wider">
+                        Belum ada tiket support yang masuk.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column: Chat Screen details */}
+              <div className="bg-slate-950/20 border border-slate-800 rounded-xl flex flex-col md:col-span-2 h-full overflow-hidden">
+                {selectedSessionId ? (
+                  <>
+                    {/* Active Thread Header */}
+                    <div className="p-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center shrink-0">
+                      <div className="text-left">
+                        <span className="text-[9px] font-mono uppercase tracking-widest text-sky-400 font-bold block">
+                          Sesi CS Aktif
+                        </span>
+                        <h4 className="text-xs font-bold text-white mt-0.5">
+                          {csSessions.find(s => s.sessionId === selectedSessionId)?.userEmail || `Guest session ${selectedSessionId.substring(selectedSessionId.length - 8)}`}
+                        </h4>
+                      </div>
+                      <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse inline-block shadow shadow-green-500/50" title="Real-time polling active"></span>
+                    </div>
+
+                    {/* Chat Messages List */}
+                    <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-950/40 text-xs flex flex-col">
+                      {loadingMessages && selectedSessionMessages.length === 0 ? (
+                        <div className="text-center py-20 font-mono text-slate-500">Memuat percakapan...</div>
+                      ) : (
+                        selectedSessionMessages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className={`flex flex-col max-w-[80%] ${
+                              msg.sender === "cs" ? "self-end items-end animate-fade-in" : "self-start items-start animate-fade-in"
+                            }`}
+                          >
+                            <div className={`p-2.5 rounded-2xl leading-relaxed text-left whitespace-pre-line ${
+                              msg.sender === "cs"
+                                ? "bg-sky-600 text-white rounded-tr-none font-medium"
+                                : "bg-slate-900 border border-slate-850 text-slate-200 rounded-tl-none"
+                            }`}>
+                              {msg.text}
+                            </div>
+                            <span className="text-[9px] text-slate-600 font-mono mt-1">
+                              {new Date(msg.createdAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Chat Text Input Form */}
+                    <form onSubmit={handleSendCsReply} className="p-3 bg-slate-900 border-t border-slate-800 flex gap-2 shrink-0">
+                      <input
+                        type="text"
+                        required
+                        placeholder="Tulis balasan untuk pelanggan..."
+                        value={csReplyText}
+                        onChange={(e) => setCsReplyText(e.target.value)}
+                        className="flex-1 px-3 py-2 text-xs bg-slate-950 border border-slate-800 text-white rounded-xl focus:outline-none focus:ring-1 focus:ring-sky-500 transition text-left"
+                      />
+                      <button
+                        type="submit"
+                        disabled={actionLoading || !csReplyText.trim()}
+                        className="p-2.5 bg-sky-600 hover:bg-sky-500 text-slate-950 rounded-xl cursor-pointer transition font-bold disabled:opacity-40 shrink-0 flex items-center justify-center font-sans"
+                        title="Kirim Balasan"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-slate-500">
+                    <MessageSquare className="w-10 h-10 text-slate-700 animate-bounce mb-3" />
+                    <h4 className="font-display font-semibold text-slate-350 text-xs uppercase tracking-wider mb-1">
+                      Saluran Dukungan Pelanggan
+                    </h4>
+                    <p className="text-[11px] text-slate-500 max-w-sm leading-relaxed">
+                      Silakan pilih salah satu sesi obrolan aktif dari panel sebelah kiri untuk mulai mengobrol langsung dan membalas kendala pelanggan.
+                    </p>
+                  </div>
+                )}
+               </div>
+             </div>
+           </div>
+         )}
+
+        {/* =======================================================
+            TAB 12: ULASAN & FEEDBACK PELANGGAN
+            ======================================================= */}
+        {activeTab === "reviews" && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 space-y-6">
+            <div className="flex justify-between items-center flex-wrap gap-4 border-b border-slate-800/60 pb-5">
+              <div>
+                <h2 className="font-display font-bold text-2xl text-white flex items-center gap-2 text-left">
+                  <Star className="w-6 h-6 text-amber-500 fill-amber-500/25 animate-pulse" />
+                  Dashboard Rating & Ulasan Pelanggan
+                </h2>
+                <p className="text-xs text-slate-400 mt-1 text-left font-sans">
+                  Pantau semua ulasan kepuasan, tanggapan bintang, dan ulasan tertulis dari pembeli toko Anda.
+                </p>
+              </div>
+            </div>
+
+            {/* Stats Overview */}
+            {(() => {
+              const ratedOrders = orders.filter((o) => o.rating && o.rating > 0);
+              const totalRating = ratedOrders.reduce((sum, o) => sum + (o.rating || 0), 0);
+              const avgRating = ratedOrders.length > 0 ? (totalRating / ratedOrders.length).toFixed(1) : "0.0";
+              
+              const star5 = ratedOrders.filter(o => o.rating === 5).length;
+              const star4 = ratedOrders.filter(o => o.rating === 4).length;
+              const star3 = ratedOrders.filter(o => o.rating === 3).length;
+              const star2 = ratedOrders.filter(o => o.rating === 2).length;
+              const star1 = ratedOrders.filter(o => o.rating === 1).length;
+
+              const getPercentage = (count: number) => {
+                if (ratedOrders.length === 0) return 0;
+                return Math.round((count / ratedOrders.length) * 100);
+              };
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-950/45 p-5 rounded-2xl border border-slate-850">
+                  <div className="flex flex-col items-center justify-center p-4 bg-slate-950/70 rounded-xl border border-slate-900 text-center">
+                    <span className="text-4xl font-mono font-extrabold text-white">{avgRating}</span>
+                    <div className="flex text-amber-400 mt-2 mb-1">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star key={s} className={`w-4 h-4 ${s <= Math.round(Number(avgRating)) ? "fill-amber-400 text-amber-450" : "text-slate-800"}`} />
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold font-mono tracking-wider font-sans">Bintang Rata-rata</span>
+                    <span className="text-[10px] text-slate-500 mt-1 font-mono">Berdasarkan {ratedOrders.length} Ulasan</span>
+                  </div>
+
+                  <div className="md:col-span-2 space-y-2 flex flex-col justify-center">
+                    <h4 className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider text-left">
+                      Distribusi Bintang
+                    </h4>
+                    
+                    {[5, 4, 3, 2, 1].map((num) => {
+                      const count = num === 5 ? star5 : num === 4 ? star4 : num === 3 ? star3 : num === 2 ? star2 : star1;
+                      const pct = getPercentage(count);
+                      return (
+                        <div key={num} className="flex items-center gap-3 text-xs opacity-90">
+                          <span className="w-10 font-mono text-slate-400 hover:text-white font-bold flex items-center justify-end gap-1 shrink-0">
+                            {num} <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          </span>
+                          <div className="flex-1 h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-950">
+                            <div 
+                              className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full transition-all duration-300" 
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="w-12 font-mono text-slate-400 text-right shrink-0">
+                            {count} ({pct}%)
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* List with clean search/filter header */}
+            {(() => {
+              const ratedOrders = orders.filter((o) => o.rating && o.rating > 0);
+              return (
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <h3 className="font-display font-semibold text-white text-base text-left">
+                      Semua Tanggapan Transaksi ({ratedOrders.length})
+                    </h3>
+                  </div>
+
+                  {ratedOrders.length === 0 ? (
+                    <div className="text-center py-16 bg-slate-950 border border-slate-850 rounded-2xl p-6">
+                      <Star className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+                      <h4 className="font-display font-semibold text-white text-sm">Belum Ada Ulasan Pembeli</h4>
+                      <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
+                        Sistem belanja Anda siap menerima ulasan. Pembeli otomatis disuguhkan modal ulasan setelah pesanan mereka diselesaikan oleh admin.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="border border-slate-850 rounded-xl overflow-hidden bg-slate-950/60 shadow">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse font-sans font-sans">
+                          <thead>
+                            <tr className="bg-slate-950 text-slate-400 text-[10px] uppercase font-mono border-b border-slate-850 font-extrabold tracking-wider">
+                              <th className="p-4">Pesanan / Tanggal</th>
+                              <th className="p-4">Pelanggan</th>
+                              <th className="p-4">Produk Digital</th>
+                              <th className="p-3 text-center">Bintang</th>
+                              <th className="p-4">Isi Ulasan & Komentar</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-850">
+                            {ratedOrders.map((o) => (
+                              <tr key={o.id} className="hover:bg-slate-900/40 transition">
+                                <td className="p-4 space-y-1">
+                                  <div className="text-xs font-mono font-bold text-white select-all">#{o.id}</div>
+                                  <div className="text-[10px] text-slate-500">
+                                    {new Date(o.createdAt).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                                  </div>
+                                </td>
+                                <td className="p-4 space-y-1 text-left">
+                                  <div className="text-xs font-semibold text-slate-205" title={o.userEmail}>{o.userEmail}</div>
+                                  <div className="text-[10px] text-slate-500 font-mono">{o.userPhone}</div>
+                                </td>
+                                <td className="p-4 text-xs font-bold text-indigo-400">
+                                  {o.productName}
+                                </td>
+                                <td className="p-3">
+                                  <div className="flex flex-col items-center justify-center gap-0.5">
+                                    <span className="font-mono text-sm font-extrabold text-amber-400">
+                                      {o.rating} ⭐
+                                    </span>
+                                    <div className="flex text-amber-500 shrink-0 font-bold">
+                                      {[1, 2, 3, 4, 5].map((star) => (
+                                        <Star
+                                          key={star}
+                                          className={`w-2.5 h-2.5 ${
+                                            star <= (o.rating || 0) ? "fill-amber-400 text-amber-450" : "text-slate-805"
+                                          }`}
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="p-4 text-xs text-slate-300 italic max-w-xs break-words">
+                                  "{o.reviewText || "Sempurna!"}"
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
