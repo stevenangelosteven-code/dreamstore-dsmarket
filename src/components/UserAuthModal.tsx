@@ -44,12 +44,22 @@ export function UserAuthModal({ isOpen, onClose, onLoginSuccess }: UserAuthModal
         body: JSON.stringify({ email: loginEmail.trim(), password: loginPassword })
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Email atau password salah.");
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("text/html") || res.status === 404) {
+        throw new Error("Koneksi API Gagal (404/HTML). Kemungkinan besar Anda mengakses domain Vercel / hosting statis yang tidak menjalankan backend server NodeJS/Express secara aktif. Harap akses melalui URL Cloud Run atau gunakan hosting full-stack!");
       }
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        throw new Error("Gagal membaca respon server (bukan JSON). Pastikan backend server aktif.");
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || "Email atau password salah.");
+      }
+
       onLoginSuccess(data.token, data.user);
       onClose();
     } catch (err: any) {
@@ -81,12 +91,22 @@ export function UserAuthModal({ isOpen, onClose, onLoginSuccess }: UserAuthModal
         })
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Pendaftaran gagal.");
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("text/html") || res.status === 404) {
+        throw new Error("Koneksi API Gagal (404/HTML). Kemungkinan besar Anda mengakses domain Vercel / hosting statis yang tidak menjalankan backend server NodeJS/Express secara aktif. Harap akses melalui URL Cloud Run atau gunakan hosting full-stack!");
       }
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        throw new Error("Gagal membaca respon server (bukan JSON). Pastikan backend server aktif.");
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || "Pendaftaran gagal.");
+      }
+
       setSuccessMsg(data.message || "Pendaftaran sukses! Silakan login.");
       // Clear forms
       setRegName("");

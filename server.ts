@@ -1850,9 +1850,13 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[DREAM STORE] Server is running beautifully on http://localhost:${PORT}`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`[DREAM STORE] Server is running beautifully on http://localhost:${PORT}`);
+    });
+  }
 }
 
 startServer();
+
+export default app;
