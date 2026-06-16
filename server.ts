@@ -2,7 +2,6 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { createHash } from "crypto";
-import { createServer as createViteServer } from "vite";
 import { DBState, Product, ProductAccount, Order, PaymentMethod, ActivityLog, BlacklistItem, Notification } from "./src/types";
 
 const app = express();
@@ -11,10 +10,19 @@ const PORT = 3000;
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-// Ensure upload directory exists
-const UPLOAD_DIR = path.join(process.cwd(), "uploads");
+const isVercel = !!process.env.VERCEL;
+
+// Ensure upload directory exists (using /tmp on Vercel)
+const UPLOAD_DIR = isVercel
+  ? "/tmp/uploads"
+  : path.join(process.cwd(), "uploads");
+
 if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  try {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  } catch (err) {
+    console.error("[DREAM STORE] Failed to create uploads directory:", err);
+  }
 }
 app.use("/uploads", express.static(UPLOAD_DIR));
 
@@ -23,7 +31,22 @@ app.use("/uploads", express.static(UPLOAD_DIR));
 const tokens = new Map<string, string>();
 const userTokens = new Map<string, { id: string; email: string }>();
 
-const DB_PATH = path.join(process.cwd(), "db_store.json");
+const DB_PATH = isVercel
+  ? "/tmp/db_store.json"
+  : path.join(process.cwd(), "db_store.json");
+
+// Copy initial database to /tmp if running on Vercel and it doesn't exist yet
+if (isVercel) {
+  try {
+    const srcPath = path.join(process.cwd(), "db_store.json");
+    if (!fs.existsSync(DB_PATH) && fs.existsSync(srcPath)) {
+      fs.copyFileSync(srcPath, DB_PATH);
+      console.log("[DREAM STORE] Copied initial db_store.json to /tmp");
+    }
+  } catch (err) {
+    console.error("[DREAM STORE] Failed to setup Vercel /tmp database copy:", err);
+  }
+}
 
 function hashPassword(password: string): string {
   return createHash("sha256").update(password).digest("hex");
@@ -1837,6 +1860,7 @@ readDB();
 // Vite middleware setup
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
