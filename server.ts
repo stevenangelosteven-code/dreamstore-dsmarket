@@ -2,6 +2,8 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { createHash } from "crypto";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 import { DBState, Product, ProductAccount, Order, PaymentMethod, ActivityLog, BlacklistItem, Notification } from "./src/types";
 
 const app = express();
@@ -47,6 +49,102 @@ if (isVercel) {
     console.error("[DREAM STORE] Failed to setup Vercel /tmp database copy:", err);
   }
 }
+
+// Load Firebase configuration
+let firestoreDb: any = null;
+try {
+  const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(firebaseConfigPath)) {
+    const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf8"));
+    const firebaseApp = initializeApp(firebaseConfig);
+    firestoreDb = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+    console.log("[DREAM STORE] Firebase initialized successfully with Firestore DB ID:", firebaseConfig.firestoreDatabaseId);
+  } else {
+    console.warn("[DREAM STORE] firebase-applet-config.json not found in root.");
+  }
+} catch (err) {
+  console.error("[DREAM STORE] Failed to initialize Firebase:", err);
+}
+
+const FB_KEYS = [
+  "admin",
+  "users",
+  "products",
+  "productAccounts",
+  "orders",
+  "paymentMethods",
+  "activityLogs",
+  "blacklist",
+  "notifications",
+  "banner",
+  "config",
+  "topups",
+  "csMessages"
+];
+
+// Sync Firestore DB to local JSON cache at boot
+async function syncFirestoreToLocal() {
+  if (!firestoreDb) {
+    console.warn("[DREAM STORE] Cannot sync from firestore: database not initialized.");
+    return;
+  }
+  console.log("[DREAM STORE] Syncing Firestore data to local cache...");
+  try {
+    const freshDb: Partial<DBState> = {};
+    for (const key of FB_KEYS) {
+      const docRef = doc(firestoreDb, "store", key);
+      const snapshot = await getDoc(docRef);
+      if (snapshot.exists()) {
+        const payload = snapshot.data();
+        if (key === "banner" || key === "config") {
+          freshDb[key as keyof DBState] = payload as any;
+        } else {
+          freshDb[key as keyof DBState] = (payload.data || []) as any;
+        }
+      }
+    }
+
+    if (Object.keys(freshDb).length > 0) {
+      const localDbExists = fs.existsSync(DB_PATH);
+      let localDb: DBState = localDbExists ? JSON.parse(fs.readFileSync(DB_PATH, "utf8")) : {} as DBState;
+      
+      for (const key of FB_KEYS) {
+        if (freshDb[key as keyof DBState] !== undefined) {
+          (localDb as any)[key] = freshDb[key as keyof DBState];
+        }
+      }
+      fs.writeFileSync(DB_PATH, JSON.stringify(localDb, null, 2));
+      console.log("[DREAM STORE] Sync from Firestore complete. Local cache updated with keys:", Object.keys(freshDb).join(", "));
+    } else {
+      console.log("[DREAM STORE] Firestore is empty or no tables found. Initializing with local config.");
+    }
+  } catch (err) {
+    console.error("[DREAM STORE] Error syncing Firestore to local:", err);
+  }
+}
+
+// Backup local JSON cache to Firestore
+async function writeDBToFirestore(data: DBState) {
+  if (!firestoreDb) return;
+  try {
+    for (const key of FB_KEYS) {
+      if (data[key as keyof DBState] !== undefined) {
+        const docRef = doc(firestoreDb, "store", key);
+        let payload: any;
+        if (key === "banner" || key === "config") {
+          payload = data[key as keyof DBState];
+        } else {
+          payload = { data: data[key as keyof DBState] };
+        }
+        await setDoc(docRef, payload);
+      }
+    }
+    console.log("[DREAM STORE] Successfully backed up database modifications to cloud Firestore.");
+  } catch (err) {
+    console.error("[DREAM STORE] Error writing to Firestore backup:", err);
+  }
+}
+
 
 function hashPassword(password: string): string {
   return createHash("sha256").update(password).digest("hex");
@@ -198,6 +296,9 @@ function readDB(): DBState {
 
 function writeDB(data: DBState) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+  writeDBToFirestore(data).catch((err) => {
+    console.error("[DREAM STORE] Background Firestore write failed:", err);
+  });
 }
 
 // Add Activity Log Helper
@@ -1853,12 +1954,12 @@ app.post("/api/admin/cs/reply", requireAdmin, (req, res) => {
   res.json({ success: true, message: replyMsg });
 });
 
-// Seed Database automatically on boot
-readDB();
-
 // INJECT VITE DEVELOPMENT OR PRODUCTION MIDDLEWARE
 // Vite middleware setup
 async function startServer() {
+  await syncFirestoreToLocal();
+  readDB();
+
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({

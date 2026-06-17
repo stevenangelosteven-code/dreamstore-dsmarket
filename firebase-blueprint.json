@@ -1,0 +1,253 @@
+{
+  "entities": {
+    "Admin": {
+      "title": "Admin",
+      "description": "Administrator credentials and info",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "passwordHash": { "type": "string" }
+      },
+      "required": ["id", "username", "passwordHash"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Registered buyer accounts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "fullName": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "passwordHash": { "type": "string" },
+        "balance": { "type": "number" },
+        "pin": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "email", "passwordHash", "balance"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Digital products catalog",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "originalPrice": { "type": "number" },
+        "desc": { "type": "string" },
+        "isReady": { "type": "boolean" },
+        "allowReviews": { "type": "boolean" },
+        "soldCount": { "type": "number" }
+      },
+      "required": ["id", "name", "price"]
+    },
+    "ProductAccount": {
+      "title": "ProductAccount",
+      "description": "Stock of digital credential accounts for products",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "credentials": { "type": "string" },
+        "isSold": { "type": "boolean" },
+        "soldToEmail": { "type": "string" },
+        "soldAt": { "type": "string" }
+      },
+      "required": ["id", "productId", "credentials", "isSold"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Purchase transaction records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "pricePaid": { "type": "number" },
+        "paymentMethodId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed", "failed", "cancelled"] },
+        "deliveredCredentials": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "remarks": { "type": "string" },
+        "paymentInstructions": { "type": "string" },
+        "isReviewed": { "type": "boolean" },
+        "reviewRating": { "type": "number" },
+        "reviewText": { "type": "string" }
+      },
+      "required": ["id", "email", "productId", "pricePaid", "status", "createdAt"]
+    },
+    "PaymentMethod": {
+      "title": "PaymentMethod",
+      "description": "Available billing/payment options",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "name": { "type": "string" },
+        "accountName": { "type": "string" },
+        "accountNo": { "type": "string" },
+        "qrCodeUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive"] }
+      },
+      "required": ["id", "type", "name", "accountName", "accountNo", "status"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "System operational history log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "action", "details", "timestamp"]
+    },
+    "BlacklistItem": {
+      "title": "BlacklistItem",
+      "description": "Banned/blacklisted buyer accounts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "reason": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "email", "reason", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "System notices for users or admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "targetRole": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "targetRole", "title", "message", "isRead", "createdAt"]
+    },
+    "TopupRequest": {
+      "title": "TopupRequest",
+      "description": "Deposit balance ticket",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "amount": { "type": "number" },
+        "paymentMethodId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed", "failed"] },
+        "remarks": { "type": "string" },
+        "receiptUrl": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "email", "amount", "paymentMethodId", "status", "createdAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Support chat history log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "sender": { "type": "string", "enum": ["user", "admin", "ai_bot"] },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "userEmail": { "type": "string" }
+      },
+      "required": ["id", "sessionId", "sender", "text", "timestamp"]
+    },
+    "SystemConfig": {
+      "title": "SystemConfig",
+      "description": "General settings configurations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "footerDescription": { "type": "string" },
+        "aboutUs": { "type": "string" },
+        "supportEmail": { "type": "string" },
+        "supportPhone": { "type": "string" },
+        "copyrightText": { "type": "string" },
+        "complainTelegramUrl": { "type": "string" },
+        "carouselSlides": { "type": "array" }
+      },
+      "required": ["id"]
+    },
+    "BannerConfig": {
+      "title": "BannerConfig",
+      "description": "Storefront banner configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "bgColor": { "type": "string" },
+        "textColor": { "type": "string" },
+        "linkUrl": { "type": "string" }
+      },
+      "required": ["id", "text", "isActive"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "Admin" },
+      "description": "Admin access accounts"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "User profile accounts"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "Product" },
+      "description": "Catalog digital product items"
+    },
+    "/productAccounts/{productAccountId}": {
+      "schema": { "$ref": "ProductAccount" },
+      "description": "Credentials stock of product items"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "Order" },
+      "description": "Customer digital orders and reviews"
+    },
+    "/paymentMethods/{paymentMethodId}": {
+      "schema": { "$ref": "PaymentMethod" },
+      "description": "Billing options configuration list"
+    },
+    "/activityLogs/{logId}": {
+      "schema": { "$ref": "ActivityLog" },
+      "description": "Admin and operational logs"
+    },
+    "/blacklist/{blacklistId}": {
+      "schema": { "$ref": "BlacklistItem" },
+      "description": "Blacklisted email addresses"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "Notification" },
+      "description": "Announcements and action alerts"
+    },
+    "/topups/{topupId}": {
+      "schema": { "$ref": "TopupRequest" },
+      "description": "Deposit and balance request tickets"
+    },
+    "/csMessages/{messageId}": {
+      "schema": { "$ref": "ChatMessage" },
+      "description": "Active support customer chats"
+    },
+    "/config/{configId}": {
+      "schema": { "$ref": "SystemConfig" },
+      "description": "Store configuration parameters"
+    },
+    "/banner/{bannerId}": {
+      "schema": { "$ref": "BannerConfig" },
+      "description": "Promotional marquee ticker setups"
+    }
+  }
+}
